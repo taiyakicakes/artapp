@@ -157,7 +157,10 @@
 	<div
 		class="bg-gradient-to-br from-violet-400 to-purple-500 px-5 pb-5 pt-12 text-white shadow-md"
 	>
-		<h1 class="text-3xl font-black">🗓️ Events</h1>
+		<div class="flex items-center gap-3">
+			<img src="/logo!.png" alt="logo" class="h-10 w-10 object-contain drop-shadow" />
+			<h1 class="text-3xl font-black">Events</h1>
+		</div>
 		<p class="mt-1 text-sm font-semibold text-violet-100">
 			{eventsStore.events.filter((e) => e.applied).length} applied of {eventsStore.events.length} total
 		</p>

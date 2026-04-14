@@ -40,6 +40,20 @@
 	let importResult = $state('');
 	let csvInput: HTMLInputElement;
 
+	const totalStocked = $derived(
+		stocksStore.items.filter((s) => (s.quantity ?? 0) >= (s.requested ?? 0)).length
+	);
+	const totalPct = $derived(
+		stocksStore.items.length > 0 ? Math.round((totalStocked / stocksStore.items.length) * 100) : 0
+	);
+
+	function barColor(pct: number): string {
+		if (pct === 0) return 'bg-rose-300';
+		if (pct < 50) return 'bg-amber-300';
+		if (pct < 100) return 'bg-teal-400';
+		return 'bg-emerald-400';
+	}
+
 	function openDetails(project: string) {
 		detailsProject = project;
 		confirmDelete = false;
@@ -231,9 +245,12 @@
 <div class="min-h-screen">
 	<!-- Header -->
 	<div class="bg-gradient-to-br from-teal-400 to-emerald-500 px-5 pb-5 pt-12 text-white shadow-md">
-		<h1 class="text-3xl font-black">📦 Stock</h1>
+		<div class="flex items-center gap-3">
+			<img src="/logo!.png" alt="logo" class="h-10 w-10 object-contain drop-shadow" />
+			<h1 class="text-3xl font-black">Stock</h1>
+		</div>
 		<p class="mt-1 text-sm font-semibold text-teal-100">
-			{stocksStore.items.length} item{stocksStore.items.length === 1 ? '' : 's'} tracked
+			{totalStocked} / {stocksStore.items.length} stocked · {totalPct}%
 		</p>
 	</div>
 
@@ -261,9 +278,11 @@
 			<div class="flex flex-col gap-4">
 				{#each stockProjects as project (project)}
 					{@const items = grouped()[project]}
+					{@const stockedCnt = items.filter((s) => (s.quantity ?? 0) >= (s.requested ?? 0)).length}
+					{@const pct = items.length > 0 ? Math.round((stockedCnt / items.length) * 100) : 0}
 					<div class="overflow-hidden rounded-2xl bg-white shadow-sm">
 						<!-- Project header -->
-						<div class="flex items-center {getProjectColor(project)} border-b">
+						<div class="flex items-center {getProjectColor(project)}">
 							<button
 								class="flex flex-1 items-center gap-2 px-4 py-3 text-base font-bold transition-opacity active:opacity-70"
 								onclick={() => toggleCollapse(project)}
@@ -272,7 +291,7 @@
 								{project}
 							</button>
 							<span class="rounded-full bg-white/60 px-2.5 py-0.5 text-xs font-extrabold">
-								{items.length}
+								{stockedCnt}/{items.length} · {pct}%
 							</span>
 							<button
 								class="ml-1 rounded-lg bg-white/60 px-2 py-1 text-xs font-bold transition-opacity active:opacity-60"
@@ -283,6 +302,10 @@
 								onclick={() => openAdd(project)}
 								aria-label="Add item to {project}"
 							>+</button>
+						</div>
+						<!-- Progress bar -->
+						<div class="h-1.5 w-full bg-gray-100">
+							<div class="h-full transition-all {barColor(pct)}" style="width: {pct}%"></div>
 						</div>
 
 						<!-- Column labels -->

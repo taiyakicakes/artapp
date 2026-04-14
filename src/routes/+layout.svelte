@@ -35,7 +35,7 @@
 </script>
 
 <svelte:head>
-	<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+	<link rel="icon" href="/logo!.png" type="image/png" />
 </svelte:head>
 
 {#if authStore.loading}
@@ -53,7 +53,7 @@
 		class="flex min-h-screen flex-col items-center justify-center gap-8 bg-gradient-to-br from-pink-100 via-rose-50 to-violet-100 px-6"
 	>
 		<div class="flex flex-col items-center gap-3 text-center">
-			<div class="text-7xl">🍡</div>
+			<img src="/logo!.png" alt="logo" class="h-36 w-36 object-contain drop-shadow-md" />
 			<h1 class="text-4xl font-black text-pink-600">{PUBLIC_APP_NAME}</h1>
 			<p class="text-lg font-semibold text-pink-400">your cute little workspace ✨</p>
 		</div>

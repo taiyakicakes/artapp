@@ -1,6 +1,21 @@
 <script lang="ts">
 	import { todosStore, addTodo, toggleTodo, deleteTodo, updateTodoPriority, deleteProject, type Priority, type Todo } from '$lib/stores/todos.svelte';
+	import { stocksStore } from '$lib/stores/stocks.svelte';
 	import Modal from '$lib/components/Modal.svelte';
+
+	function stockStats(project: string) {
+		const items = stocksStore.items.filter((s) => s.project === project);
+		const stocked = items.filter((s) => (s.quantity ?? 0) >= (s.requested ?? 0)).length;
+		const pct = items.length > 0 ? Math.round((stocked / items.length) * 100) : null;
+		return { total: items.length, stocked, pct };
+	}
+
+	function barColor(pct: number | null): string {
+		if (pct === null || pct === 0) return 'bg-rose-300';
+		if (pct < 50) return 'bg-amber-300';
+		if (pct < 100) return 'bg-teal-400';
+		return 'bg-emerald-400';
+	}
 
 	const PRIORITY_ORDER: Record<Priority, number> = { high: 0, medium: 1, low: 2 };
 
@@ -127,10 +142,17 @@
 <div class="min-h-screen">
 	<!-- Header -->
 	<div class="bg-gradient-to-br from-pink-400 to-rose-400 px-5 pb-6 pt-12 text-white shadow-md">
-		<h1 class="text-3xl font-black">✨ My Projects</h1>
-		<p class="mt-1 text-sm font-semibold text-pink-100">
-			{todosStore.todos.filter((t) => t.done).length} / {todosStore.todos.length} done
-		</p>
+		<div class="flex items-center gap-3">
+			<img src="/logo!.png" alt="logo" class="h-10 w-10 object-contain drop-shadow" />
+			<h1 class="text-3xl font-black">My Projects</h1>
+		</div>
+		<div class="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-sm font-semibold text-pink-100">
+			<span>{todosStore.todos.filter((t) => t.done).length} / {todosStore.todos.length} tasks done</span>
+			{#if stocksStore.items.length > 0}
+				{@const allStocked = stocksStore.items.filter((s) => (s.quantity ?? 0) >= (s.requested ?? 0)).length}
+				<span>📦 {allStocked} / {stocksStore.items.length} stocked · {Math.round((allStocked / stocksStore.items.length) * 100)}%</span>
+			{/if}
+		</div>
 	</div>
 
 	<!-- Content -->
@@ -150,9 +172,10 @@
 				{#each projects as project (project)}
 					{@const todos = grouped()[project]}
 					{@const doneCnt = todos.filter((t) => t.done).length}
+					{@const ss = stockStats(project)}
 					<div class="overflow-hidden rounded-2xl bg-white shadow-sm">
 						<!-- Project header -->
-						<div class="flex items-center {getProjectColor(project)} border-b">
+						<div class="flex items-center {getProjectColor(project)}">
 							<button
 								class="flex flex-1 items-center gap-2 px-4 py-3 text-base font-bold transition-opacity active:opacity-70"
 								onclick={() => toggleCollapse(project)}
@@ -160,9 +183,12 @@
 								<span>{collapsed[project] ? '▶' : '▼'}</span>
 								{project}
 							</button>
-							<span class="rounded-full bg-white/60 px-2.5 py-0.5 text-xs font-extrabold">
-								{doneCnt}/{todos.length}
-							</span>
+							<div class="flex flex-col items-end gap-0.5 pr-1">
+								<span class="rounded-full bg-white/60 px-2 py-0.5 text-xs font-extrabold">{doneCnt}/{todos.length} done</span>
+								{#if ss.total > 0}
+									<span class="rounded-full bg-white/60 px-2 py-0.5 text-xs font-extrabold">📦 {ss.stocked}/{ss.total} · {ss.pct}%</span>
+								{/if}
+							</div>
 							<button
 								class="ml-1 rounded-lg bg-white/60 px-2 py-1 text-xs font-bold transition-opacity active:opacity-60"
 								onclick={() => openDetails(project)}
@@ -173,6 +199,14 @@
 								aria-label="Add task to {project}"
 							>+</button>
 						</div>
+						<!-- Progress bar -->
+						{#if ss.total > 0}
+							<div class="h-1.5 w-full bg-gray-100">
+								<div class="h-full transition-all {barColor(ss.pct)}" style="width: {ss.pct}%"></div>
+							</div>
+						{:else}
+							<div class="h-px w-full bg-black/10"></div>
+						{/if}
 
 						<!-- Todo items -->
 						{#if !collapsed[project]}

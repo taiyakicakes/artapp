@@ -68,3 +68,8 @@ export async function updateTodoPriority(id: string, priority: Priority) {
 export async function deleteTodo(id: string) {
 	await deleteDoc(doc(db, 'todos', id));
 }
+
+export async function deleteProject(project: string) {
+	const ids = todosStore.todos.filter((t) => t.project === project).map((t) => t.id);
+	await Promise.all(ids.map((id) => deleteDoc(doc(db, 'todos', id))));
+}

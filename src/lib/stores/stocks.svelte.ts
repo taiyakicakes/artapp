@@ -15,7 +15,8 @@ export interface StockItem {
 	id: string;
 	project: string;
 	name: string;
-	quantity: number;
+	quantity: number;   // current stock (± buttons)
+	requested: number;  // amount requested/needed (number box)
 	createdAt: Date;
 }
 
@@ -44,19 +45,25 @@ export function unsubscribeStocks() {
 	unsubscribe = null;
 }
 
-export async function addStockItem(project: string, name: string, quantity = 0) {
+export async function addStockItem(project: string, name: string, quantity = 0, requested = 0) {
 	await addDoc(collection(db, 'stocks'), {
 		project,
 		name,
 		quantity,
+		requested,
 		createdAt: serverTimestamp()
 	});
 }
 
-export async function updateStockItem(id: string, data: Partial<Pick<StockItem, 'name' | 'quantity' | 'project'>>) {
+export async function updateStockItem(id: string, data: Partial<Pick<StockItem, 'name' | 'quantity' | 'requested' | 'project'>>) {
 	await updateDoc(doc(db, 'stocks', id), data);
 }
 
 export async function deleteStockItem(id: string) {
 	await deleteDoc(doc(db, 'stocks', id));
+}
+
+export async function deleteStockProject(project: string) {
+	const ids = stocksStore.items.filter((s) => s.project === project).map((s) => s.id);
+	await Promise.all(ids.map((id) => deleteDoc(doc(db, 'stocks', id))));
 }

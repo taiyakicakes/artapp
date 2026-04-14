@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { todosStore, addTodo, toggleTodo, deleteTodo, updateTodoPriority, type Priority, type Todo } from '$lib/stores/todos.svelte';
+	import { todosStore, addTodo, toggleTodo, deleteTodo, updateTodoPriority, deleteProject, type Priority, type Todo } from '$lib/stores/todos.svelte';
 	import Modal from '$lib/components/Modal.svelte';
 
 	const PRIORITY_ORDER: Record<Priority, number> = { high: 0, medium: 1, low: 2 };
@@ -93,6 +93,30 @@
 		high: '🔴 High', medium: '🟡 Medium', low: '🔵 Low'
 	};
 
+	// ── Project details modal ──
+	let detailsOpen = $state(false);
+	let detailsProject = $state('');
+	let confirmDelete = $state(false);
+	let deleting = $state(false);
+
+	function openDetails(project: string) {
+		detailsProject = project;
+		confirmDelete = false;
+		detailsOpen = true;
+	}
+
+	async function handleDeleteProject() {
+		if (!confirmDelete) { confirmDelete = true; return; }
+		deleting = true;
+		try {
+			await deleteProject(detailsProject);
+			detailsOpen = false;
+		} finally {
+			deleting = false;
+			confirmDelete = false;
+		}
+	}
+
 	// ── Collapsible ──
 	let collapsed = $state<Record<string, boolean>>({});
 	function toggleCollapse(project: string) {
@@ -140,7 +164,11 @@
 								{doneCnt}/{todos.length}
 							</span>
 							<button
-								class="ml-2 mr-3 flex h-9 w-9 items-center justify-center rounded-full bg-white/80 text-2xl font-black leading-none shadow-sm transition-transform active:scale-90"
+								class="ml-1 rounded-lg bg-white/60 px-2 py-1 text-xs font-bold transition-opacity active:opacity-60"
+								onclick={() => openDetails(project)}
+							>•••</button>
+							<button
+								class="ml-1 mr-3 flex h-9 w-9 items-center justify-center rounded-full bg-white/80 text-2xl font-black leading-none shadow-sm transition-transform active:scale-90"
 								onclick={() => openAddModal(project)}
 								aria-label="Add task to {project}"
 							>+</button>
@@ -277,6 +305,32 @@
 		>
 			{saving ? 'Adding...' : 'Add Task ✨'}
 		</button>
+	</div>
+</Modal>
+
+<!-- Project Details Modal -->
+<Modal bind:open={detailsOpen} title="Project Details">
+	{@const todos = grouped()[detailsProject] ?? []}
+	{@const doneCnt = todos.filter((t) => t.done).length}
+	<div class="flex flex-col gap-4">
+		<div class="rounded-2xl bg-gray-50 px-4 py-4 flex flex-col gap-2">
+			<p class="text-lg font-black text-gray-800">{detailsProject}</p>
+			<p class="text-sm font-semibold text-gray-500">{todos.length} task{todos.length === 1 ? '' : 's'} · {doneCnt} done</p>
+		</div>
+		<button
+			onclick={handleDeleteProject}
+			disabled={deleting}
+			class="w-full rounded-2xl border-2 py-4 text-base font-extrabold transition-all active:scale-95 disabled:opacity-50
+				{confirmDelete ? 'border-red-400 bg-red-500 text-white' : 'border-red-100 bg-red-50 text-red-400'}"
+		>
+			{deleting ? 'Deleting...' : confirmDelete ? '⚠️ Confirm — delete all tasks?' : 'Delete Project'}
+		</button>
+		{#if confirmDelete}
+			<button
+				onclick={() => (confirmDelete = false)}
+				class="w-full rounded-2xl border-2 border-gray-100 bg-gray-50 py-3 text-sm font-bold text-gray-400"
+			>Cancel</button>
+		{/if}
 	</div>
 </Modal>
 

@@ -4,6 +4,7 @@
 	import { authStore, signIn, signOut } from '$lib/stores/auth.svelte';
 	import { subscribeTodos, unsubscribeTodos } from '$lib/stores/todos.svelte';
 	import { subscribeEvents, unsubscribeEvents } from '$lib/stores/events.svelte';
+	import { subscribeStocks, unsubscribeStocks } from '$lib/stores/stocks.svelte';
 	import BottomNav from '$lib/components/BottomNav.svelte';
 	import { PUBLIC_APP_NAME } from '$env/static/public';
 
@@ -13,9 +14,11 @@
 		if (authStore.authorized) {
 			subscribeTodos();
 			subscribeEvents();
+			subscribeStocks();
 		} else {
 			unsubscribeTodos();
 			unsubscribeEvents();
+			unsubscribeStocks();
 		}
 	});
 

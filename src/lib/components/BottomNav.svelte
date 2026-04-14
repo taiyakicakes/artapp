@@ -8,22 +8,21 @@
 >
 	<a
 		href="/todos"
-		class="flex flex-1 flex-col items-center gap-0.5 py-3 transition-colors {page.url.pathname.startsWith(
-			'/todos'
-		)
-			? 'text-pink-500'
-			: 'text-gray-400'}"
+		class="flex flex-1 flex-col items-center gap-0.5 py-3 transition-colors {page.url.pathname.startsWith('/todos') ? 'text-pink-500' : 'text-gray-400'}"
 	>
 		<span class="text-2xl leading-none">📝</span>
 		<span class="text-xs font-bold">To-Do</span>
 	</a>
 	<a
+		href="/stock"
+		class="flex flex-1 flex-col items-center gap-0.5 py-3 transition-colors {page.url.pathname.startsWith('/stock') ? 'text-pink-500' : 'text-gray-400'}"
+	>
+		<span class="text-2xl leading-none">📦</span>
+		<span class="text-xs font-bold">Stock</span>
+	</a>
+	<a
 		href="/events"
-		class="flex flex-1 flex-col items-center gap-0.5 py-3 transition-colors {page.url.pathname.startsWith(
-			'/events'
-		)
-			? 'text-pink-500'
-			: 'text-gray-400'}"
+		class="flex flex-1 flex-col items-center gap-0.5 py-3 transition-colors {page.url.pathname.startsWith('/events') ? 'text-pink-500' : 'text-gray-400'}"
 	>
 		<span class="text-2xl leading-none">🗓️</span>
 		<span class="text-xs font-bold">Events</span>

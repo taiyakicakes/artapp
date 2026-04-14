@@ -5,6 +5,7 @@
 	import { subscribeTodos, unsubscribeTodos } from '$lib/stores/todos.svelte';
 	import { subscribeEvents, unsubscribeEvents } from '$lib/stores/events.svelte';
 	import BottomNav from '$lib/components/BottomNav.svelte';
+	import { PUBLIC_APP_NAME } from '$env/static/public';
 
 	let { children } = $props();
 
@@ -50,7 +51,7 @@
 	>
 		<div class="flex flex-col items-center gap-3 text-center">
 			<div class="text-7xl">🍡</div>
-			<h1 class="text-4xl font-black text-pink-600">taiyakicakes</h1>
+			<h1 class="text-4xl font-black text-pink-600">{PUBLIC_APP_NAME}</h1>
 			<p class="text-lg font-semibold text-pink-400">your cute little workspace ✨</p>
 		</div>
 

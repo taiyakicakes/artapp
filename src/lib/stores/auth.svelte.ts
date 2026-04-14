@@ -1,8 +1,9 @@
 import { auth } from '$lib/firebase';
 import { signInWithPopup, GoogleAuthProvider, signOut as firebaseSignOut } from 'firebase/auth';
 import type { User } from 'firebase/auth';
+import { PUBLIC_ALLOWED_EMAIL } from '$env/static/public';
 
-const ALLOWED_EMAIL = 'taiyakicakes@gmail.com';
+const ALLOWED_EMAIL = PUBLIC_ALLOWED_EMAIL;
 const provider = new GoogleAuthProvider();
 
 export const authStore = $state({

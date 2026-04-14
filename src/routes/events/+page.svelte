@@ -236,6 +236,7 @@
 		{:else}
 			<div class="flex flex-col gap-3">
 				{#each filtered() as event (event.id)}
+					{@const prog = eventProgress(event)}
 					<div class="overflow-hidden rounded-2xl bg-white shadow-sm">
 						<!-- Card header -->
 						<div class="px-4 pt-4">
@@ -288,7 +289,6 @@
 						</div>
 
 						<!-- Linked project progress -->
-						{@const prog = eventProgress(event)}
 						{#if prog}
 							<div class="mt-3 px-4">
 								<div class="mb-1 flex items-center justify-between">

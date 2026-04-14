@@ -20,6 +20,7 @@ export interface Todo {
 	done: boolean;
 	priority: Priority;
 	createdAt: Date;
+	blockedBy?: string; // id of blocking todo
 }
 
 export const todosStore = $state({
@@ -63,6 +64,15 @@ export async function toggleTodo(id: string, done: boolean) {
 
 export async function updateTodoPriority(id: string, priority: Priority) {
 	await updateDoc(doc(db, 'todos', id), { priority });
+}
+
+export async function setBlocker(id: string, blockedBy: string | null) {
+	if (blockedBy === null) {
+		const { deleteField } = await import('firebase/firestore');
+		await updateDoc(doc(db, 'todos', id), { blockedBy: deleteField() });
+	} else {
+		await updateDoc(doc(db, 'todos', id), { blockedBy });
+	}
 }
 
 export async function deleteTodo(id: string) {

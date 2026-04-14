@@ -7,6 +7,13 @@
 	style="padding-bottom: env(safe-area-inset-bottom)"
 >
 	<a
+		href="/home"
+		class="flex flex-1 flex-col items-center gap-0.5 py-3 transition-colors {page.url.pathname.startsWith('/home') ? 'text-pink-500' : 'text-gray-400'}"
+	>
+		<span class="text-2xl leading-none">🏠</span>
+		<span class="text-xs font-bold">Home</span>
+	</a>
+	<a
 		href="/todos"
 		class="flex flex-1 flex-col items-center gap-0.5 py-3 transition-colors {page.url.pathname.startsWith('/todos') ? 'text-pink-500' : 'text-gray-400'}"
 	>

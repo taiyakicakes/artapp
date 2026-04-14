@@ -5,6 +5,7 @@
 	import { subscribeTodos, unsubscribeTodos } from '$lib/stores/todos.svelte';
 	import { subscribeEvents, unsubscribeEvents } from '$lib/stores/events.svelte';
 	import { subscribeStocks, unsubscribeStocks } from '$lib/stores/stocks.svelte';
+	import { subscribeLinks, unsubscribeLinks } from '$lib/stores/links.svelte';
 	import BottomNav from '$lib/components/BottomNav.svelte';
 	import { PUBLIC_APP_NAME } from '$env/static/public';
 
@@ -15,10 +16,12 @@
 			subscribeTodos();
 			subscribeEvents();
 			subscribeStocks();
+			subscribeLinks();
 		} else {
 			unsubscribeTodos();
 			unsubscribeEvents();
 			unsubscribeStocks();
+			unsubscribeLinks();
 		}
 	});
 

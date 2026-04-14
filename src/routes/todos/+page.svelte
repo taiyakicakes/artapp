@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { todosStore, addTodo, toggleTodo, deleteTodo, updateTodoPriority, deleteProject, type Priority, type Todo } from '$lib/stores/todos.svelte';
+	import { todosStore, addTodo, toggleTodo, deleteTodo, updateTodoPriority, deleteProject, setBlocker, type Priority, type Todo } from '$lib/stores/todos.svelte';
 	import { stocksStore } from '$lib/stores/stocks.svelte';
 	import Modal from '$lib/components/Modal.svelte';
 
@@ -68,19 +68,51 @@
 		}
 	}
 
-	// ── Priority modal (tap existing task) ──
-	let priorityOpen = $state(false);
+	// ── Task details modal (tap existing task) ──
+	let detailTodoOpen = $state(false);
 	let selectedTodo = $state<Todo | null>(null);
+	let blockerPickerOpen = $state(false);
 
-	function openPriorityModal(todo: Todo) {
+	function openDetailModal(todo: Todo) {
 		selectedTodo = todo;
-		priorityOpen = true;
+		blockerPickerOpen = false;
+		detailTodoOpen = true;
 	}
 
 	async function setPriority(p: Priority) {
 		if (!selectedTodo) return;
 		await updateTodoPriority(selectedTodo.id, p);
-		priorityOpen = false;
+		// refresh local ref
+		selectedTodo = todosStore.todos.find((t) => t.id === selectedTodo!.id) ?? selectedTodo;
+	}
+
+	async function handleSetBlocker(blockerId: string | null) {
+		if (!selectedTodo) return;
+		await setBlocker(selectedTodo.id, blockerId);
+		selectedTodo = todosStore.todos.find((t) => t.id === selectedTodo!.id) ?? selectedTodo;
+		blockerPickerOpen = false;
+	}
+
+	// Candidates: all undone todos except self (and avoid circular: exclude ones blocked by this todo)
+	const blockerCandidates = $derived(
+		selectedTodo
+			? todosStore.todos.filter(
+					(t) => t.id !== selectedTodo!.id && !t.done && t.blockedBy !== selectedTodo!.id
+				)
+			: []
+	);
+
+	// Derive blocker todo object for display
+	const blockerTodo = $derived(
+		selectedTodo?.blockedBy
+			? todosStore.todos.find((t) => t.id === selectedTodo!.blockedBy)
+			: null
+	);
+
+	function isBlocked(todo: Todo): boolean {
+		if (!todo.blockedBy) return false;
+		const blocker = todosStore.todos.find((t) => t.id === todo.blockedBy);
+		return !!blocker && !blocker.done;
 	}
 
 	// ── Project colors ──
@@ -213,33 +245,48 @@
 							<div class="divide-y divide-gray-50">
 								{#each todos as todo (todo.id)}
 									{@const p = todo.priority ?? 'medium'}
-									<div class="flex items-center gap-3 px-4 py-3 {todo.done ? 'bg-gray-50' : 'bg-white'}">
+									{@const blocked = isBlocked(todo)}
+									{@const blocker = blocked ? todosStore.todos.find((t) => t.id === todo.blockedBy) : null}
+									<div class="flex items-center gap-3 px-4 py-3 {todo.done ? 'bg-gray-50' : blocked ? 'bg-gray-50/80' : 'bg-white'}">
 										<!-- Checkbox -->
 										<button
 											class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-all {todo.done
 												? 'border-pink-400 bg-pink-400 text-white'
+												: blocked
+												? 'cursor-not-allowed border-gray-200 bg-gray-100'
 												: 'border-gray-300 hover:border-pink-300'}"
-											onclick={() => toggleTodo(todo.id, !todo.done)}
+											onclick={() => !blocked && toggleTodo(todo.id, !todo.done)}
+											disabled={blocked}
 											aria-label="Toggle todo"
 										>
 											{#if todo.done}
 												<svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
 													<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
 												</svg>
+											{:else if blocked}
+												<svg class="h-3 w-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+												</svg>
 											{/if}
 										</button>
 
-										<!-- Task text — tap to set priority -->
+										<!-- Task text — tap to open details -->
 										<button
-											class="flex flex-1 flex-col items-start gap-1 text-left"
-											onclick={() => openPriorityModal(todo)}
+											class="flex flex-1 flex-col items-start gap-1 text-left {blocked ? 'opacity-50' : ''}"
+											onclick={() => openDetailModal(todo)}
 										>
-											<span class="text-sm font-semibold {todo.done ? 'text-gray-400 line-through' : 'text-gray-700'}">
+											<span class="text-sm font-semibold {todo.done ? 'text-gray-400 line-through' : blocked ? 'text-gray-400' : 'text-gray-700'}">
 												{todo.task}
 											</span>
-											<span class="rounded-md px-1.5 py-0.5 text-xs font-bold {priorityBadge[p]}">
-												{priorityLabel[p]}
-											</span>
+											{#if blocked && blocker}
+												<span class="rounded-md bg-gray-200 px-1.5 py-0.5 text-xs font-bold text-gray-500">
+													🔒 Blocked by: {blocker.task}
+												</span>
+											{:else}
+												<span class="rounded-md px-1.5 py-0.5 text-xs font-bold {priorityBadge[p]}">
+													{priorityLabel[p]}
+												</span>
+											{/if}
 										</button>
 
 										<!-- Delete -->
@@ -368,33 +415,87 @@
 	</div>
 </Modal>
 
-<!-- Priority Modal (tap existing task) -->
-<Modal bind:open={priorityOpen} title="Set Priority">
+<!-- Task Details Modal -->
+<Modal bind:open={detailTodoOpen} title="Task Details">
 	{#if selectedTodo}
-		<div class="flex flex-col gap-3">
+		<div class="flex flex-col gap-4">
+			<!-- Task name -->
 			<p class="rounded-xl bg-gray-50 px-4 py-3 text-sm font-semibold text-gray-700">
 				{selectedTodo.task}
 			</p>
-			{#each (['high', 'medium', 'low'] as Priority[]) as p (p)}
-				{@const active = (selectedTodo.priority ?? 'medium') === p}
-				<button
-					class="flex items-center gap-3 rounded-2xl border-2 px-5 py-4 text-left text-base font-bold transition-all active:scale-95 {active
-						? p === 'high' ? 'border-red-300 bg-red-50 text-red-600'
-						: p === 'medium' ? 'border-amber-300 bg-amber-50 text-amber-600'
-						: 'border-sky-300 bg-sky-50 text-sky-600'
-						: 'border-gray-100 bg-white text-gray-500'}"
-					onclick={() => setPriority(p)}
-				>
-					<span class="text-xl">{p === 'high' ? '🔴' : p === 'medium' ? '🟡' : '🔵'}</span>
-					<div>
-						<div>{p.charAt(0).toUpperCase() + p.slice(1)}</div>
-						<div class="text-xs font-semibold opacity-60">
-							{p === 'high' ? 'Do this first' : p === 'medium' ? 'Get to it soon' : 'Whenever you can'}
+
+			<!-- Priority section -->
+			<div>
+				<p class="mb-2 text-xs font-black uppercase tracking-wide text-gray-400">Priority</p>
+				<div class="flex flex-col gap-2">
+					{#each (['high', 'medium', 'low'] as Priority[]) as p (p)}
+						{@const active = (selectedTodo.priority ?? 'medium') === p}
+						<button
+							class="flex items-center gap-3 rounded-2xl border-2 px-4 py-3 text-left text-sm font-bold transition-all active:scale-95 {active
+								? p === 'high' ? 'border-red-300 bg-red-50 text-red-600'
+								: p === 'medium' ? 'border-amber-300 bg-amber-50 text-amber-600'
+								: 'border-sky-300 bg-sky-50 text-sky-600'
+								: 'border-gray-100 bg-white text-gray-500'}"
+							onclick={() => setPriority(p)}
+						>
+							<span>{p === 'high' ? '🔴' : p === 'medium' ? '🟡' : '🔵'}</span>
+							<div>
+								<div>{p.charAt(0).toUpperCase() + p.slice(1)}</div>
+								<div class="text-xs font-semibold opacity-60">
+									{p === 'high' ? 'Do this first' : p === 'medium' ? 'Get to it soon' : 'Whenever you can'}
+								</div>
+							</div>
+							{#if active}<span class="ml-auto text-base">✓</span>{/if}
+						</button>
+					{/each}
+				</div>
+			</div>
+
+			<!-- Blocker section -->
+			<div>
+				<p class="mb-2 text-xs font-black uppercase tracking-wide text-gray-400">Blocked By</p>
+				{#if blockerTodo}
+					<!-- Current blocker shown -->
+					<div class="flex items-center gap-2 rounded-2xl border-2 border-gray-200 bg-gray-50 px-4 py-3">
+						<span class="text-base">🔒</span>
+						<div class="flex flex-1 flex-col">
+							<span class="text-sm font-bold text-gray-700">{blockerTodo.task}</span>
+							<span class="text-xs text-gray-400">{blockerTodo.project}</span>
 						</div>
+						<button
+							class="rounded-lg bg-red-50 px-2 py-1 text-xs font-bold text-red-400 active:scale-95"
+							onclick={() => handleSetBlocker(null)}
+						>Remove</button>
 					</div>
-					{#if active}<span class="ml-auto text-lg">✓</span>{/if}
-				</button>
-			{/each}
+				{:else if !blockerPickerOpen}
+					<button
+						class="w-full rounded-2xl border-2 border-dashed border-gray-200 py-3 text-sm font-bold text-gray-400 transition-colors hover:border-pink-300 hover:text-pink-400"
+						onclick={() => (blockerPickerOpen = true)}
+					>+ Set a blocker</button>
+				{/if}
+
+				{#if blockerPickerOpen}
+					<div class="mt-2 flex flex-col gap-1 rounded-2xl border border-gray-100 bg-gray-50 p-2 max-h-52 overflow-y-auto">
+						{#if blockerCandidates.length === 0}
+							<p class="py-2 text-center text-xs text-gray-400">No other open tasks</p>
+						{:else}
+							{#each blockerCandidates as candidate (candidate.id)}
+								<button
+									class="flex flex-col items-start rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-gray-700 hover:bg-white active:scale-95"
+									onclick={() => handleSetBlocker(candidate.id)}
+								>
+									<span>{candidate.task}</span>
+									<span class="text-xs font-normal text-gray-400">{candidate.project}</span>
+								</button>
+							{/each}
+						{/if}
+						<button
+							class="mt-1 w-full rounded-xl py-2 text-xs font-bold text-gray-400 hover:bg-white"
+							onclick={() => (blockerPickerOpen = false)}
+						>Cancel</button>
+					</div>
+				{/if}
+			</div>
 		</div>
 	{/if}
 </Modal>

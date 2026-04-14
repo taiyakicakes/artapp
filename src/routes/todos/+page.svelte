@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { todosStore, addTodo, toggleTodo, deleteTodo, updateTodoPriority, deleteProject, setBlocker, type Priority, type Todo } from '$lib/stores/todos.svelte';
+	import { todosStore, addTodo, toggleTodo, deleteTodo, updateTodoPriority, updateTodoTask, deleteProject, setBlocker, type Priority, type Todo } from '$lib/stores/todos.svelte';
+	import { projectPrioritiesStore, setProjectPriority, clearProjectPriority } from '$lib/stores/projectPriorities.svelte';
 	import { stocksStore } from '$lib/stores/stocks.svelte';
 	import Modal from '$lib/components/Modal.svelte';
 
@@ -36,7 +37,15 @@
 		return map;
 	});
 
-	const projects = $derived(Object.keys(grouped()));
+	const PROJECT_PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
+
+	const projects = $derived(
+		Object.keys(grouped()).sort((a, b) => {
+			const pa = PROJECT_PRIORITY_ORDER[projectPrioritiesStore.priorities[a] ?? ''] ?? 3;
+			const pb = PROJECT_PRIORITY_ORDER[projectPrioritiesStore.priorities[b] ?? ''] ?? 3;
+			return pa - pb;
+		})
+	);
 
 	// ── Add task modal ──
 	let addOpen = $state(false);
@@ -72,11 +81,25 @@
 	let detailTodoOpen = $state(false);
 	let selectedTodo = $state<Todo | null>(null);
 	let blockerPickerOpen = $state(false);
+	let editTaskName = $state('');
+	let savingName = $state(false);
 
 	function openDetailModal(todo: Todo) {
 		selectedTodo = todo;
+		editTaskName = todo.task;
 		blockerPickerOpen = false;
 		detailTodoOpen = true;
+	}
+
+	async function handleSaveTaskName() {
+		if (!selectedTodo || !editTaskName.trim() || editTaskName.trim() === selectedTodo.task) return;
+		savingName = true;
+		try {
+			await updateTodoTask(selectedTodo.id, editTaskName.trim());
+			selectedTodo = { ...selectedTodo, task: editTaskName.trim() };
+		} finally {
+			savingName = false;
+		}
 	}
 
 	async function setPriority(p: Priority) {
@@ -189,6 +212,14 @@
 
 	<!-- Content -->
 	<div class="px-4 py-5">
+		<!-- Add task button -->
+		<button
+			onclick={() => openAddModal()}
+			class="mb-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-pink-500 py-3.5 text-base font-extrabold text-white shadow-sm transition-all active:scale-95"
+		>
+			<span class="text-xl leading-none">+</span> New Task
+		</button>
+
 		{#if todosStore.loading}
 			<div class="flex justify-center py-12">
 				<div class="h-10 w-10 animate-spin rounded-full border-4 border-pink-200 border-t-pink-500"></div>
@@ -205,6 +236,7 @@
 					{@const todos = grouped()[project]}
 					{@const doneCnt = todos.filter((t) => t.done).length}
 					{@const ss = stockStats(project)}
+					{@const projPriority = projectPrioritiesStore.priorities[project]}
 					<div class="overflow-hidden rounded-2xl bg-white shadow-sm">
 						<!-- Project header -->
 						<div class="flex items-center {getProjectColor(project)}">
@@ -214,6 +246,9 @@
 							>
 								<span>{collapsed[project] ? '▶' : '▼'}</span>
 								{project}
+								{#if projPriority}
+									<span class="text-sm">{projPriority === 'high' ? '🔴' : projPriority === 'medium' ? '🟡' : '🔵'}</span>
+								{/if}
 							</button>
 							<div class="flex flex-col items-end gap-0.5 pr-1">
 								<span class="rounded-full bg-white/60 px-2 py-0.5 text-xs font-extrabold">{doneCnt}/{todos.length} done</span>
@@ -310,13 +345,6 @@
 	</div>
 </div>
 
-<!-- FAB -->
-<button
-	onclick={() => openAddModal()}
-	class="fixed right-5 z-40 flex h-16 w-16 items-center justify-center rounded-full bg-pink-500 text-3xl font-black text-white shadow-lg transition-transform active:scale-90"
-	style="bottom: calc(4.5rem + env(safe-area-inset-bottom))"
-	aria-label="Add todo"
->+</button>
 
 <!-- Add Task Modal -->
 <Modal bind:open={addOpen} title="New Task ✏️">
@@ -393,11 +421,36 @@
 <Modal bind:open={detailsOpen} title="Project Details">
 	{@const todos = grouped()[detailsProject] ?? []}
 	{@const doneCnt = todos.filter((t) => t.done).length}
+	{@const curProjPriority = projectPrioritiesStore.priorities[detailsProject]}
 	<div class="flex flex-col gap-4">
 		<div class="rounded-2xl bg-gray-50 px-4 py-4 flex flex-col gap-2">
 			<p class="text-lg font-black text-gray-800">{detailsProject}</p>
 			<p class="text-sm font-semibold text-gray-500">{todos.length} task{todos.length === 1 ? '' : 's'} · {doneCnt} done</p>
 		</div>
+
+		<!-- Project priority -->
+		<div>
+			<p class="mb-2 text-xs font-black uppercase tracking-wide text-gray-400">Project Priority</p>
+			<div class="flex gap-2">
+				{#each (['high', 'medium', 'low'] as Priority[]) as p (p)}
+					<button
+						class="flex flex-1 flex-col items-center gap-0.5 rounded-2xl border-2 py-3 text-sm font-bold transition-all active:scale-95 {curProjPriority === p
+							? p === 'high' ? 'border-red-300 bg-red-100 text-red-600'
+							: p === 'medium' ? 'border-amber-300 bg-amber-100 text-amber-600'
+							: 'border-sky-300 bg-sky-100 text-sky-600'
+							: 'border-gray-100 bg-white text-gray-400'}"
+						onclick={() => curProjPriority === p ? clearProjectPriority(detailsProject) : setProjectPriority(detailsProject, p)}
+					>
+						<span>{p === 'high' ? '🔴' : p === 'medium' ? '🟡' : '🔵'}</span>
+						<span class="text-xs">{p.charAt(0).toUpperCase() + p.slice(1)}</span>
+					</button>
+				{/each}
+			</div>
+			{#if curProjPriority}
+				<p class="mt-1.5 text-center text-xs text-gray-400">Tap active to clear</p>
+			{/if}
+		</div>
+
 		<button
 			onclick={handleDeleteProject}
 			disabled={deleting}
@@ -419,10 +472,23 @@
 <Modal bind:open={detailTodoOpen} title="Task Details">
 	{#if selectedTodo}
 		<div class="flex flex-col gap-4">
-			<!-- Task name -->
-			<p class="rounded-xl bg-gray-50 px-4 py-3 text-sm font-semibold text-gray-700">
-				{selectedTodo.task}
-			</p>
+			<!-- Task name (editable) -->
+			<div>
+				<p class="mb-1.5 text-xs font-black uppercase tracking-wide text-gray-400">Task Name</p>
+				<div class="flex gap-2">
+					<textarea
+						bind:value={editTaskName}
+						rows="2"
+						class="flex-1 resize-none rounded-xl border-2 border-pink-100 bg-pink-50 px-3 py-2.5 text-sm font-semibold text-gray-700 outline-none focus:border-pink-400"
+						onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSaveTaskName(); } }}
+					></textarea>
+					<button
+						onclick={handleSaveTaskName}
+						disabled={savingName || !editTaskName.trim() || editTaskName.trim() === selectedTodo.task}
+						class="self-stretch rounded-xl bg-pink-500 px-3 text-sm font-bold text-white transition-all active:scale-95 disabled:opacity-40"
+					>{savingName ? '…' : 'Save'}</button>
+				</div>
+			</div>
 
 			<!-- Priority section -->
 			<div>

@@ -22,6 +22,7 @@ export interface ArtEvent {
 	cost: number | null;
 	travelCost: number | null;
 	notes: string;
+	linkedProjects: string[];
 	createdAt: Date;
 }
 

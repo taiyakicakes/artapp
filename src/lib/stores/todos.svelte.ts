@@ -66,6 +66,10 @@ export async function updateTodoPriority(id: string, priority: Priority) {
 	await updateDoc(doc(db, 'todos', id), { priority });
 }
 
+export async function updateTodoTask(id: string, task: string) {
+	await updateDoc(doc(db, 'todos', id), { task });
+}
+
 export async function setBlocker(id: string, blockedBy: string | null) {
 	if (blockedBy === null) {
 		const { deleteField } = await import('firebase/firestore');

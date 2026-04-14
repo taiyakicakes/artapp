@@ -7,7 +7,27 @@
 		toggleApplied,
 		type ArtEvent
 	} from '$lib/stores/events.svelte';
+	import { todosStore } from '$lib/stores/todos.svelte';
 	import Modal from '$lib/components/Modal.svelte';
+
+	// All unique project names from todos
+	const allProjects = $derived([...new Set(todosStore.todos.map((t) => t.project))].sort());
+
+	// Progress for linked projects on an event
+	function eventProgress(event: ArtEvent) {
+		if (!event.linkedProjects?.length) return null;
+		const tasks = todosStore.todos.filter((t) => event.linkedProjects.includes(t.project));
+		if (!tasks.length) return null;
+		const done = tasks.filter((t) => t.done).length;
+		return { done, total: tasks.length, pct: Math.round((done / tasks.length) * 100) };
+	}
+
+	function progressBarColor(pct: number) {
+		if (pct === 0) return 'bg-rose-300';
+		if (pct < 50) return 'bg-amber-300';
+		if (pct < 100) return 'bg-teal-400';
+		return 'bg-emerald-400';
+	}
 
 	// Filter state
 	let filterStatus = $state<'all' | 'applied' | 'not-applied'>('all');
@@ -47,7 +67,8 @@
 		links: [] as string[],
 		cost: '',
 		travelCost: '',
-		notes: ''
+		notes: '',
+		linkedProjects: [] as string[]
 	});
 	let newRequirement = $state('');
 	let newLink = $state('');
@@ -64,7 +85,8 @@
 			links: [],
 			cost: '',
 			travelCost: '',
-			notes: ''
+			notes: '',
+			linkedProjects: []
 		};
 		newRequirement = '';
 		newLink = '';
@@ -82,7 +104,8 @@
 			links: [...event.links],
 			cost: event.cost != null ? String(event.cost) : '',
 			travelCost: event.travelCost != null ? String(event.travelCost) : '',
-			notes: event.notes
+			notes: event.notes,
+			linkedProjects: [...(event.linkedProjects ?? [])]
 		};
 		newRequirement = '';
 		newLink = '';
@@ -124,7 +147,8 @@
 				links: form.links,
 				cost: form.cost ? Number(form.cost) : null,
 				travelCost: form.travelCost ? Number(form.travelCost) : null,
-				notes: form.notes.trim()
+				notes: form.notes.trim(),
+				linkedProjects: form.linkedProjects
 			};
 			if (editingEvent) {
 				await updateEvent(editingEvent.id, data);
@@ -262,6 +286,27 @@
 								</div>
 							{/if}
 						</div>
+
+						<!-- Linked project progress -->
+						{@const prog = eventProgress(event)}
+						{#if prog}
+							<div class="mt-3 px-4">
+								<div class="mb-1 flex items-center justify-between">
+									<span class="text-xs font-bold text-gray-400">
+										Tasks · {event.linkedProjects.join(', ')}
+									</span>
+									<span class="text-xs font-extrabold {prog.pct === 100 ? 'text-emerald-500' : 'text-gray-500'}">
+										{prog.done}/{prog.total} done
+									</span>
+								</div>
+								<div class="h-2 w-full overflow-hidden rounded-full bg-gray-100">
+									<div
+										class="h-full rounded-full transition-all {progressBarColor(prog.pct)}"
+										style="width: {prog.pct}%"
+									></div>
+								</div>
+							</div>
+						{/if}
 
 						<!-- Card footer row -->
 						<div class="mt-2 flex items-center border-t border-gray-50">
@@ -523,6 +568,31 @@
 				</button>
 			</div>
 		</div>
+
+		<!-- Linked Projects -->
+		{#if allProjects.length > 0}
+			<div>
+				<p class="mb-1.5 text-sm font-bold text-gray-600">Linked Projects</p>
+				<div class="flex flex-wrap gap-2">
+					{#each allProjects as project (project)}
+						{@const linked = form.linkedProjects.includes(project)}
+						<button
+							type="button"
+							class="rounded-xl border-2 px-3 py-1.5 text-sm font-bold transition-all active:scale-95 {linked
+								? 'border-violet-300 bg-violet-100 text-violet-700'
+								: 'border-gray-100 bg-gray-50 text-gray-400'}"
+							onclick={() => {
+								form.linkedProjects = linked
+									? form.linkedProjects.filter((p) => p !== project)
+									: [...form.linkedProjects, project];
+							}}
+						>
+							{linked ? '✓ ' : ''}{project}
+						</button>
+					{/each}
+				</div>
+			</div>
+		{/if}
 
 		<!-- Notes -->
 		<div>

@@ -320,8 +320,12 @@
 
 							<!-- Item rows -->
 							<div class="divide-y divide-gray-50">
-								{#each items as item (item.id)}
-									<div class="flex items-center gap-3 px-4 py-2.5">
+								{#each items.slice().sort((a, b) => {
+									const aOk = getQty(a) >= getReq(a);
+									const bOk = getQty(b) >= getReq(b);
+									return aOk === bOk ? 0 : aOk ? 1 : -1;
+								}) as item (item.id)}
+									<div class="flex items-center gap-3 px-4 py-2.5 {getQty(item) >= getReq(item) ? 'bg-emerald-50' : ''}">
 										<!-- Name -->
 										<button
 											class="flex-1 text-left text-sm font-semibold text-gray-700 active:opacity-60"

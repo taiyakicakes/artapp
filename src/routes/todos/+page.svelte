@@ -282,7 +282,7 @@
 									{@const p = todo.priority ?? 'medium'}
 									{@const blocked = isBlocked(todo)}
 									{@const blocker = blocked ? todosStore.todos.find((t) => t.id === todo.blockedBy) : null}
-									<div class="flex items-center gap-3 px-4 py-3 {todo.done ? 'bg-gray-50' : blocked ? 'bg-gray-50/80' : 'bg-white'}">
+									<div class="flex items-center gap-3 px-4 py-3 {todo.done ? 'bg-emerald-50' : blocked ? 'bg-gray-50/80' : 'bg-white'}">
 										<!-- Checkbox -->
 										<button
 											class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-all {todo.done

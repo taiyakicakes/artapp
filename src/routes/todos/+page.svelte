@@ -267,13 +267,9 @@
 							>+</button>
 						</div>
 						<!-- Progress bar -->
-						{#if ss.total > 0}
-							<div class="h-1.5 w-full bg-gray-100">
-								<div class="h-full transition-all {barColor(ss.pct)}" style="width: {ss.pct}%"></div>
-							</div>
-						{:else}
-							<div class="h-px w-full bg-black/10"></div>
-						{/if}
+						<div class="h-1.5 w-full bg-gray-100">
+							<div class="h-full transition-all {barColor(todos.length > 0 ? Math.round((doneCnt / todos.length) * 100) : 0)}" style="width: {todos.length > 0 ? Math.round((doneCnt / todos.length) * 100) : 0}%"></div>
+						</div>
 
 						<!-- Todo items -->
 						{#if !collapsed[project]}

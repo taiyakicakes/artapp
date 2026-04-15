@@ -2,13 +2,53 @@
 	import { linksStore, addLink, deleteLink } from '$lib/stores/links.svelte';
 	import { todosStore, toggleTodo } from '$lib/stores/todos.svelte';
 	import { projectPrioritiesStore } from '$lib/stores/projectPriorities.svelte';
+	import { archivedProjectsStore } from '$lib/stores/archivedProjects.svelte';
+	import { eventsStore, getEventStatus, type EventStatus } from '$lib/stores/events.svelte';
 
-	// ── Links ──
+	const today = new Date().toISOString().slice(0, 10);
+
+	// ── Upcoming events ──
+	const upcomingEvents = $derived(() =>
+		eventsStore.events.filter((e) => e.date >= today).slice(0, 3)
+	);
+
+	const statusCls: Record<EventStatus, string> = {
+		none: 'bg-gray-100 text-gray-500',
+		applied: 'bg-blue-100 text-blue-600',
+		accepted: 'bg-emerald-100 text-emerald-600',
+		waitlisted: 'bg-amber-100 text-amber-600',
+		rejected: 'bg-red-100 text-red-500'
+	};
+
+	const statusLabel: Record<EventStatus, string> = {
+		none: 'Not applied',
+		applied: '📨 Applied',
+		accepted: '🎉 Accepted',
+		waitlisted: '⏳ Waitlisted',
+		rejected: '❌ Rejected'
+	};
+
+	function daysUntil(dateStr: string): number {
+		const [y, m, d] = dateStr.split('-').map(Number);
+		const eventDate = new Date(y, m - 1, d);
+		const now = new Date();
+		now.setHours(0, 0, 0, 0);
+		return Math.ceil((eventDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+	}
+
+	function formatEventDate(dateStr: string): string {
+		const [y, m, d] = dateStr.split('-').map(Number);
+		return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+	}
+
+	// ── Quick Links ──
 	let showForm = $state(false);
 	let label = $state('');
 	let url = $state('');
 	let saving = $state(false);
 	let editMode = $state(false);
+	let copyMode = $state(false);
+	let copiedId = $state('');
 
 	async function handleAdd() {
 		if (!label.trim() || !url.trim()) return;
@@ -32,6 +72,16 @@
 		}
 	}
 
+	async function copyLink(link: { id: string; url: string }) {
+		try {
+			await navigator.clipboard.writeText(link.url);
+			copiedId = link.id;
+			setTimeout(() => (copiedId = ''), 1500);
+		} catch {
+			// fallback: do nothing
+		}
+	}
+
 	// ── Next Up carousel ──
 	const PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
 	const PROJECT_PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
@@ -43,9 +93,11 @@
 		return !!blocker && !blocker.done;
 	}
 
-	// Sorted projects (by project priority, then alpha)
+	// Sorted active (non-archived) projects by project priority then alpha
 	const sortedProjects = $derived(() => {
-		const projectNames = [...new Set(todosStore.todos.map((t) => t.project))];
+		const projectNames = [...new Set(todosStore.todos.map((t) => t.project))].filter(
+			(p) => !archivedProjectsStore.archived.has(p)
+		);
 		return projectNames.sort((a, b) => {
 			const pa = PROJECT_PRIORITY_ORDER[projectPrioritiesStore.priorities[a] ?? ''] ?? 3;
 			const pb = PROJECT_PRIORITY_ORDER[projectPrioritiesStore.priorities[b] ?? ''] ?? 3;
@@ -54,7 +106,6 @@
 		});
 	});
 
-	// For each project, find the highest priority non-blocked non-done task
 	function topTask(project: string) {
 		const tasks = todosStore.todos
 			.filter((t) => t.project === project && !t.done && !isBlocked(t.id))
@@ -68,7 +119,6 @@
 
 	let carouselIndex = $state(0);
 
-	// Clamp index when projects list changes
 	$effect(() => {
 		const len = sortedProjects().length;
 		if (carouselIndex >= len && len > 0) carouselIndex = len - 1;
@@ -101,7 +151,7 @@
 <div class="min-h-screen bg-gradient-to-br from-pink-50 via-rose-50 to-violet-50 px-4 pt-8 pb-6">
 	<div class="mx-auto max-w-md flex flex-col gap-8">
 
-		<!-- ── Next Up ── -->
+		<!-- ── Next Up (todos) ── -->
 		{#if !todosStore.loading && sortedProjects().length > 0}
 			{@const projects = sortedProjects()}
 			{@const project = projects[carouselIndex]}
@@ -110,7 +160,6 @@
 			<div>
 				<h2 class="mb-3 text-lg font-black text-pink-600">Next Up 🎯</h2>
 				<div class="rounded-2xl border-2 bg-white p-5 shadow-sm {pp ? projPriorityBorder[pp] : 'border-transparent'}">
-					<!-- Project name + priority -->
 					<div class="mb-3 flex items-center gap-2">
 						<span class="text-base font-black text-gray-800">{project}</span>
 						{#if pp}
@@ -121,7 +170,6 @@
 						<span class="ml-auto text-xs text-gray-400">{carouselIndex + 1} / {projects.length}</span>
 					</div>
 
-					<!-- Top task -->
 					{#if task}
 						<div class="rounded-xl bg-gray-50 px-4 py-3">
 							<div class="flex items-start gap-3">
@@ -144,7 +192,6 @@
 						</div>
 					{/if}
 
-					<!-- Arrows -->
 					{#if projects.length > 1}
 						<div class="mt-4 flex items-center justify-center gap-6">
 							<button
@@ -166,6 +213,37 @@
 			</div>
 		{/if}
 
+		<!-- ── Upcoming Events ── -->
+		{#if !eventsStore.loading && upcomingEvents().length > 0}
+			<div>
+				<div class="mb-3 flex items-center justify-between">
+					<h2 class="text-lg font-black text-pink-600">Upcoming Events 🗓️</h2>
+					<a href="/events" class="text-sm font-bold text-pink-400">See all →</a>
+				</div>
+				<div class="flex flex-col gap-2">
+					{#each upcomingEvents() as event (event.id)}
+						{@const status = getEventStatus(event)}
+						{@const days = daysUntil(event.date)}
+						<a
+							href="/events"
+							class="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 shadow-sm transition-transform active:scale-95"
+						>
+							<div class="flex-1 min-w-0">
+								<p class="truncate text-sm font-extrabold text-gray-800">{event.name}</p>
+								<p class="text-xs font-semibold text-gray-400">
+									{formatEventDate(event.date)} ·
+									{days === 0 ? 'Today! 🎉' : days === 1 ? 'Tomorrow' : `${days} days away`}
+								</p>
+							</div>
+							<span class="shrink-0 rounded-xl px-2.5 py-1 text-xs font-bold {statusCls[status]}">
+								{statusLabel[status]}
+							</span>
+						</a>
+					{/each}
+				</div>
+			</div>
+		{/if}
+
 		<!-- ── Quick Links ── -->
 		<div>
 			<div class="mb-3 flex items-center justify-between">
@@ -173,7 +251,15 @@
 				<div class="flex gap-2">
 					{#if linksStore.links.length > 0}
 						<button
-							onclick={() => (editMode = !editMode)}
+							onclick={() => { copyMode = !copyMode; if (copyMode) editMode = false; }}
+							class="rounded-xl px-3 py-1.5 text-sm font-bold transition-colors {copyMode
+								? 'bg-violet-500 text-white'
+								: 'bg-white text-violet-400 shadow-sm'}"
+						>
+							{copyMode ? 'Done' : '📋 Copy'}
+						</button>
+						<button
+							onclick={() => { editMode = !editMode; if (editMode) copyMode = false; }}
 							class="rounded-xl px-3 py-1.5 text-sm font-bold transition-colors {editMode
 								? 'bg-pink-500 text-white'
 								: 'bg-white text-pink-400 shadow-sm'}"
@@ -193,7 +279,6 @@
 				</div>
 			</div>
 
-			<!-- Add form -->
 			{#if showForm}
 				<div class="mb-4 rounded-2xl bg-white p-4 shadow-md">
 					<div class="flex flex-col gap-3">
@@ -223,7 +308,6 @@
 				</div>
 			{/if}
 
-			<!-- Links grid -->
 			{#if linksStore.loading}
 				<div class="flex justify-center py-8">
 					<div class="h-8 w-8 animate-spin rounded-full border-4 border-pink-200 border-t-pink-500"></div>
@@ -238,14 +322,29 @@
 				<div class="grid grid-cols-2 gap-3">
 					{#each linksStore.links as link (link.id)}
 						<div class="relative">
-							<a
-								href={link.url}
-								target="_blank"
-								rel="noopener noreferrer"
-								class="flex min-h-[80px] w-full items-center justify-center rounded-2xl bg-white px-3 py-4 text-center text-sm font-bold text-gray-700 shadow-sm transition-transform active:scale-95 {editMode ? 'opacity-60 pointer-events-none' : ''}"
-							>
-								{link.label}
-							</a>
+							{#if copyMode}
+								<button
+									onclick={() => copyLink(link)}
+									class="flex min-h-[80px] w-full flex-col items-center justify-center gap-1 rounded-2xl bg-white px-3 py-4 text-center shadow-sm transition-transform active:scale-95"
+								>
+									{#if copiedId === link.id}
+										<span class="text-lg">✓</span>
+										<span class="text-xs font-bold text-emerald-500">Copied!</span>
+									{:else}
+										<span class="text-sm font-bold text-gray-700">{link.label}</span>
+										<span class="text-xs text-gray-400">Tap to copy</span>
+									{/if}
+								</button>
+							{:else}
+								<a
+									href={link.url}
+									target="_blank"
+									rel="noopener noreferrer"
+									class="flex min-h-[80px] w-full items-center justify-center rounded-2xl bg-white px-3 py-4 text-center text-sm font-bold text-gray-700 shadow-sm transition-transform active:scale-95 {editMode ? 'opacity-60 pointer-events-none' : ''}"
+								>
+									{link.label}
+								</a>
+							{/if}
 							{#if editMode}
 								<button
 									onclick={() => deleteLink(link.id)}

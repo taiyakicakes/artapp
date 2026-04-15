@@ -7,6 +7,9 @@
 	import { subscribeStocks, unsubscribeStocks } from '$lib/stores/stocks.svelte';
 	import { subscribeLinks, unsubscribeLinks } from '$lib/stores/links.svelte';
 	import { subscribeProjectPriorities, unsubscribeProjectPriorities } from '$lib/stores/projectPriorities.svelte';
+	import { subscribeArchivedProjects, unsubscribeArchivedProjects } from '$lib/stores/archivedProjects.svelte';
+	import { subscribeCash, unsubscribeCash } from '$lib/stores/cashTransactions.svelte';
+	import { subscribeSettings, unsubscribeSettings } from '$lib/stores/settings.svelte';
 	import BottomNav from '$lib/components/BottomNav.svelte';
 	import { PUBLIC_APP_NAME } from '$env/static/public';
 
@@ -19,12 +22,18 @@
 			subscribeStocks();
 			subscribeLinks();
 			subscribeProjectPriorities();
+			subscribeArchivedProjects();
+			subscribeCash();
+			subscribeSettings();
 		} else {
 			unsubscribeTodos();
 			unsubscribeEvents();
 			unsubscribeStocks();
 			unsubscribeLinks();
 			unsubscribeProjectPriorities();
+			unsubscribeArchivedProjects();
+			unsubscribeCash();
+			unsubscribeSettings();
 		}
 	});
 

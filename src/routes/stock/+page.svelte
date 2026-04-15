@@ -1,9 +1,20 @@
 <script lang="ts">
-	import { stocksStore, addStockItem, updateStockItem, deleteStockItem, deleteStockProject, type StockItem } from '$lib/stores/stocks.svelte';
+	import {
+		stocksStore,
+		addStockItem,
+		updateStockItem,
+		deleteStockItem,
+		deleteStockProject,
+		type StockItem
+	} from '$lib/stores/stocks.svelte';
 	import { todosStore } from '$lib/stores/todos.svelte';
+	import { renameProject } from '$lib/stores/todos.svelte';
+	import { renameProjectInEvents } from '$lib/stores/events.svelte';
+	import { archivedProjectsStore } from '$lib/stores/archivedProjects.svelte';
+	import { settingsStore } from '$lib/stores/settings.svelte';
 	import Modal from '$lib/components/Modal.svelte';
 
-	// Projects from todos + existing stock projects
+	// Projects from todos + existing stock projects (excluding archived)
 	const projects = $derived(() => {
 		const set = new Set<string>();
 		for (const t of todosStore.todos) set.add(t.project);
@@ -21,7 +32,10 @@
 		return map;
 	});
 
-	const stockProjects = $derived(Object.keys(grouped()));
+	// Only show non-archived stock projects
+	const stockProjects = $derived(
+		Object.keys(grouped()).filter((p) => !archivedProjectsStore.archived.has(p))
+	);
 
 	// ── Collapsible ──
 	let collapsed = $state<Record<string, boolean>>({});
@@ -34,6 +48,8 @@
 	let detailsProject = $state('');
 	let confirmDelete = $state(false);
 	let deleting = $state(false);
+	let renameInput = $state('');
+	let renaming = $state(false);
 
 	// CSV import
 	let importing = $state(false);
@@ -58,13 +74,27 @@
 		detailsProject = project;
 		confirmDelete = false;
 		importResult = '';
+		renameInput = project;
 		detailsOpen = true;
+	}
+
+	async function handleRename() {
+		const trimmed = renameInput.trim();
+		if (!trimmed || trimmed === detailsProject || renaming) return;
+		renaming = true;
+		try {
+			await renameProject(detailsProject, trimmed);
+			await renameProjectInEvents(detailsProject, trimmed);
+			detailsProject = trimmed;
+			renameInput = trimmed;
+		} finally {
+			renaming = false;
+		}
 	}
 
 	function parseCSV(text: string): { name: string; quantity: number }[] {
 		const lines = text.trim().split(/\r?\n/);
 		if (lines.length < 2) return [];
-		// Find column indexes from header
 		const headers = lines[0].split(',').map((h) => h.trim().toLowerCase().replace(/"/g, ''));
 		const itemIdx = headers.findIndex((h) => h === 'items' || h === 'item' || h === 'name');
 		const qtyIdx = headers.findIndex((h) => h === 'quantity' || h === 'qty');
@@ -144,7 +174,7 @@
 		return projectColors[idx < 0 ? 0 : idx];
 	}
 
-	// ── Debounced Firestore writes for quantity fields ──
+	// ── Debounced Firestore writes ──
 	let pendingQty = $state<Record<string, number>>({});
 	let pendingReq = $state<Record<string, number>>({});
 	let timers: Record<string, ReturnType<typeof setTimeout>> = {};
@@ -244,7 +274,10 @@
 
 <div class="min-h-screen">
 	<!-- Header -->
-	<div class="bg-gradient-to-br from-teal-400 to-emerald-500 px-5 pb-5 pt-12 text-white shadow-md">
+	<div
+		class="px-5 pb-5 pt-12 text-white shadow-md {!settingsStore.settings.stockBg ? 'bg-gradient-to-br from-teal-400 to-emerald-500' : ''}"
+		style={settingsStore.settings.stockBg ? `background: linear-gradient(to bottom right, rgba(45,212,191,0.85), rgba(52,211,153,0.85)), url('${settingsStore.settings.stockBg}') center/cover no-repeat` : ''}
+	>
 		<div class="flex items-center gap-3">
 			<img src="/logo!.png" alt="logo" class="h-10 w-10 object-contain drop-shadow" />
 			<h1 class="text-3xl font-black">Stock</h1>
@@ -254,9 +287,7 @@
 		</p>
 	</div>
 
-	<!-- Content -->
 	<div class="px-4 py-5">
-		<!-- Add item button -->
 		<button
 			onclick={() => openAdd()}
 			class="mb-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-teal-500 py-3.5 text-base font-extrabold text-white shadow-sm transition-all active:scale-95"
@@ -281,7 +312,6 @@
 					{@const stockedCnt = items.filter((s) => (s.quantity ?? 0) >= (s.requested ?? 0)).length}
 					{@const pct = items.length > 0 ? Math.round((stockedCnt / items.length) * 100) : 0}
 					<div class="overflow-hidden rounded-2xl bg-white shadow-sm">
-						<!-- Project header -->
 						<div class="flex items-center {getProjectColor(project)}">
 							<button
 								class="flex flex-1 items-center gap-2 px-4 py-3 text-base font-bold transition-opacity active:opacity-70"
@@ -303,12 +333,10 @@
 								aria-label="Add item to {project}"
 							>+</button>
 						</div>
-						<!-- Progress bar -->
 						<div class="h-1.5 w-full bg-gray-100">
 							<div class="h-full transition-all {barColor(pct)}" style="width: {pct}%"></div>
 						</div>
 
-						<!-- Column labels -->
 						{#if !collapsed[project]}
 							<div class="flex items-center border-b border-gray-50 bg-gray-50/60 px-4 py-1.5">
 								<span class="flex-1 text-xs font-extrabold uppercase tracking-wide text-gray-400">Item</span>
@@ -317,8 +345,6 @@
 									<span class="w-16 text-center text-xs font-extrabold uppercase tracking-wide text-sky-400">Needed</span>
 								</div>
 							</div>
-
-							<!-- Item rows -->
 							<div class="divide-y divide-gray-50">
 								{#each items.slice().sort((a, b) => {
 									const aOk = getQty(a) >= getReq(a);
@@ -326,16 +352,13 @@
 									return aOk === bOk ? 0 : aOk ? 1 : -1;
 								}) as item (item.id)}
 									<div class="flex items-center gap-3 px-4 py-2.5 {getQty(item) >= getReq(item) ? 'bg-emerald-50' : ''}">
-										<!-- Name -->
 										<button
 											class="flex-1 text-left text-sm font-semibold text-gray-700 active:opacity-60"
 											onclick={() => openEdit(item)}
 										>
 											{item.name}
 										</button>
-
 										<div class="flex items-center gap-2">
-											<!-- Col 1: In Stock — ± buttons -->
 											<div class="flex w-28 items-center gap-1">
 												<button
 													class="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-50 text-lg font-black text-rose-400 transition-transform active:scale-90"
@@ -359,8 +382,6 @@
 													aria-label="Increase"
 												>+</button>
 											</div>
-
-											<!-- Col 2: Needed — number input only -->
 											<input
 												type="text"
 												inputmode="numeric"
@@ -380,7 +401,6 @@
 		{/if}
 	</div>
 </div>
-
 
 <!-- Add Item Modal -->
 <Modal bind:open={addOpen} title="New Stock Item 📦">
@@ -409,50 +429,28 @@
 				{/if}
 			</div>
 		</div>
-
 		<div>
 			<label class="mb-1.5 block text-sm font-bold text-gray-600" for="stock-name">Item Name</label>
-			<input
-				id="stock-name"
-				type="text"
-				bind:value={newName}
-				placeholder="e.g. Holographic stickers"
-				class="w-full rounded-xl border-2 border-teal-100 bg-teal-50 px-4 py-3 font-semibold text-gray-700 outline-none focus:border-teal-400"
-			/>
+			<input id="stock-name" type="text" bind:value={newName} placeholder="e.g. Holographic stickers"
+				class="w-full rounded-xl border-2 border-teal-100 bg-teal-50 px-4 py-3 font-semibold text-gray-700 outline-none focus:border-teal-400" />
 		</div>
-
 		<div class="grid grid-cols-2 gap-3">
 			<div>
 				<label class="mb-1.5 block text-sm font-bold text-rose-500" for="stock-qty">In Stock</label>
-				<input
-					id="stock-qty"
-					type="text"
-					inputmode="numeric"
-					pattern="[0-9]*"
-					bind:value={newQty}
-					class="w-full rounded-xl border-2 border-teal-100 bg-teal-50 px-4 py-3 font-semibold text-gray-700 outline-none focus:border-teal-400"
-				/>
+				<input id="stock-qty" type="text" inputmode="numeric" pattern="[0-9]*" bind:value={newQty}
+					class="w-full rounded-xl border-2 border-teal-100 bg-teal-50 px-4 py-3 font-semibold text-gray-700 outline-none focus:border-teal-400" />
 			</div>
 			<div>
 				<label class="mb-1.5 block text-sm font-bold text-sky-500" for="stock-req">Needed</label>
-				<input
-					id="stock-req"
-					type="text"
-					inputmode="numeric"
-					pattern="[0-9]*"
-					bind:value={newReq}
-					class="w-full rounded-xl border-2 border-sky-100 bg-sky-50 px-4 py-3 font-semibold text-gray-700 outline-none focus:border-sky-400"
-				/>
+				<input id="stock-req" type="text" inputmode="numeric" pattern="[0-9]*" bind:value={newReq}
+					class="w-full rounded-xl border-2 border-sky-100 bg-sky-50 px-4 py-3 font-semibold text-gray-700 outline-none focus:border-sky-400" />
 			</div>
 		</div>
-
 		<button
 			onclick={handleAdd}
 			disabled={!newProject.trim() || !newName.trim() || saving}
 			class="mt-1 w-full rounded-2xl bg-teal-500 py-4 text-base font-extrabold text-white shadow-md transition-all active:scale-95 disabled:opacity-50"
-		>
-			{saving ? 'Adding...' : 'Add Item ✨'}
-		</button>
+		>{saving ? 'Adding...' : 'Add Item ✨'}</button>
 	</div>
 </Modal>
 
@@ -462,35 +460,20 @@
 		<div class="flex flex-col gap-4">
 			<div>
 				<label class="mb-1.5 block text-sm font-bold text-gray-600" for="edit-name">Item Name</label>
-				<input
-					id="edit-name"
-					type="text"
-					bind:value={editName}
-					class="w-full rounded-xl border-2 border-teal-100 bg-teal-50 px-4 py-3 font-semibold text-gray-700 outline-none focus:border-teal-400"
-				/>
+				<input id="edit-name" type="text" bind:value={editName}
+					class="w-full rounded-xl border-2 border-teal-100 bg-teal-50 px-4 py-3 font-semibold text-gray-700 outline-none focus:border-teal-400" />
 			</div>
 			<div>
 				<label class="mb-1.5 block text-sm font-bold text-gray-600" for="edit-project">Project</label>
-				<input
-					id="edit-project"
-					type="text"
-					bind:value={editProject}
-					class="w-full rounded-xl border-2 border-teal-100 bg-teal-50 px-4 py-3 font-semibold text-gray-700 outline-none focus:border-teal-400"
-				/>
+				<input id="edit-project" type="text" bind:value={editProject}
+					class="w-full rounded-xl border-2 border-teal-100 bg-teal-50 px-4 py-3 font-semibold text-gray-700 outline-none focus:border-teal-400" />
 			</div>
-			<button
-				onclick={handleEdit}
-				disabled={!editName.trim() || editSaving}
+			<button onclick={handleEdit} disabled={!editName.trim() || editSaving}
 				class="w-full rounded-2xl bg-teal-500 py-4 text-base font-extrabold text-white shadow-md transition-all active:scale-95 disabled:opacity-50"
-			>
-				{editSaving ? 'Saving...' : 'Save Changes ✨'}
-			</button>
-			<button
-				onclick={handleDelete}
+			>{editSaving ? 'Saving...' : 'Save Changes ✨'}</button>
+			<button onclick={handleDelete}
 				class="w-full rounded-2xl border-2 border-red-100 bg-red-50 py-3.5 text-base font-bold text-red-400 transition-all active:scale-95"
-			>
-				Delete Item
-			</button>
+			>Delete Item</button>
 		</div>
 	{/if}
 </Modal>
@@ -504,42 +487,47 @@
 			<p class="text-sm font-semibold text-gray-500">{items.length} item{items.length === 1 ? '' : 's'}</p>
 		</div>
 
+		<!-- Rename -->
+		<div>
+			<p class="mb-2 text-xs font-black uppercase tracking-wide text-gray-400">Rename Project</p>
+			<div class="flex gap-2">
+				<input
+					type="text"
+					bind:value={renameInput}
+					placeholder={detailsProject}
+					class="flex-1 rounded-xl border-2 border-teal-100 bg-teal-50 px-3 py-2.5 text-sm font-semibold text-gray-700 outline-none focus:border-teal-400"
+					onkeydown={(e) => e.key === 'Enter' && handleRename()}
+				/>
+				<button
+					onclick={handleRename}
+					disabled={renaming || !renameInput.trim() || renameInput.trim() === detailsProject}
+					class="rounded-xl bg-teal-500 px-3 py-2.5 text-sm font-bold text-white transition-all active:scale-95 disabled:opacity-40"
+				>{renaming ? '…' : 'Save'}</button>
+			</div>
+			<p class="mt-1 text-xs text-gray-400">Renames across tasks, stock, and events</p>
+		</div>
+
 		<!-- CSV Import -->
 		<div class="rounded-2xl border-2 border-teal-100 bg-teal-50 px-4 py-4 flex flex-col gap-3">
 			<div>
 				<p class="text-sm font-extrabold text-teal-700">Import from CSV</p>
 				<p class="mt-0.5 text-xs font-semibold text-teal-500">Columns: <span class="font-black">Items</span>, <span class="font-black">Quantity</span> — existing items get their required qty updated</p>
 			</div>
-			<input
-				bind:this={csvInput}
-				type="file"
-				accept=".csv,text/csv"
-				onchange={handleCSVImport}
-				class="hidden"
-			/>
-			<button
-				onclick={() => csvInput.click()}
-				disabled={importing}
+			<input bind:this={csvInput} type="file" accept=".csv,text/csv" onchange={handleCSVImport} class="hidden" />
+			<button onclick={() => csvInput.click()} disabled={importing}
 				class="w-full rounded-xl bg-teal-500 py-3 text-sm font-extrabold text-white transition-all active:scale-95 disabled:opacity-50"
-			>
-				{importing ? 'Importing...' : '📂 Choose CSV File'}
-			</button>
+			>{importing ? 'Importing...' : '📂 Choose CSV File'}</button>
 			{#if importResult}
 				<p class="text-sm font-bold {importResult.startsWith('✅') ? 'text-emerald-600' : 'text-red-500'}">{importResult}</p>
 			{/if}
 		</div>
 
-		<button
-			onclick={handleDeleteProject}
-			disabled={deleting}
+		<button onclick={handleDeleteProject} disabled={deleting}
 			class="w-full rounded-2xl border-2 py-4 text-base font-extrabold transition-all active:scale-95 disabled:opacity-50
 				{confirmDelete ? 'border-red-400 bg-red-500 text-white' : 'border-red-100 bg-red-50 text-red-400'}"
-		>
-			{deleting ? 'Deleting...' : confirmDelete ? '⚠️ Confirm — delete all items?' : 'Delete Project'}
-		</button>
+		>{deleting ? 'Deleting...' : confirmDelete ? '⚠️ Confirm — delete all items?' : 'Delete Project'}</button>
 		{#if confirmDelete}
-			<button
-				onclick={() => (confirmDelete = false)}
+			<button onclick={() => (confirmDelete = false)}
 				class="w-full rounded-2xl border-2 border-gray-100 bg-gray-50 py-3 text-sm font-bold text-gray-400"
 			>Cancel</button>
 		{/if}

@@ -11,12 +11,20 @@ import {
 	serverTimestamp
 } from 'firebase/firestore';
 
+export type EventStatus = 'none' | 'applied' | 'accepted' | 'waitlisted' | 'rejected';
+
+export type EventType = 'standard' | 'application';
+
 export interface ArtEvent {
 	id: string;
 	name: string;
-	date: string; // YYYY-MM-DD
+	date: string; // YYYY-MM-DD (event date; optional for application type)
 	location: string;
 	applied: boolean;
+	eventType?: EventType;
+	status?: EventStatus;
+	applicationDueDate?: string | null; // YYYY-MM-DD
+	revenue?: number | null;
 	requirements: string[];
 	links: string[];
 	cost: number | null;
@@ -68,4 +76,30 @@ export async function deleteEvent(id: string) {
 
 export async function toggleApplied(id: string, applied: boolean) {
 	await updateDoc(doc(db, 'events', id), { applied });
+}
+
+export async function updateEventStatus(id: string, status: EventStatus) {
+	const update: Record<string, unknown> = { status, applied: status !== 'none' };
+	// Auto-convert application → standard when outcome is known
+	if (status === 'accepted' || status === 'rejected') {
+		update.eventType = 'standard';
+	}
+	await updateDoc(doc(db, 'events', id), update);
+}
+
+export function getEventStatus(event: ArtEvent): EventStatus {
+	if (event.status) return event.status;
+	return event.applied ? 'applied' : 'none';
+}
+
+export async function renameProjectInEvents(oldName: string, newName: string) {
+	const trimmed = newName.trim();
+	const toUpdate = eventsStore.events.filter((e) => e.linkedProjects?.includes(oldName));
+	await Promise.all(
+		toUpdate.map((e) =>
+			updateEvent(e.id, {
+				linkedProjects: e.linkedProjects.map((p) => (p === oldName ? trimmed : p))
+			})
+		)
+	);
 }

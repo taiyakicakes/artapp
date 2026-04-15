@@ -8,7 +8,11 @@ import {
 	onSnapshot,
 	query,
 	orderBy,
-	serverTimestamp
+	serverTimestamp,
+	writeBatch,
+	getDocs,
+	where,
+	getDoc
 } from 'firebase/firestore';
 
 export type Priority = 'high' | 'medium' | 'low';
@@ -86,4 +90,41 @@ export async function deleteTodo(id: string) {
 export async function deleteProject(project: string) {
 	const ids = todosStore.todos.filter((t) => t.project === project).map((t) => t.id);
 	await Promise.all(ids.map((id) => deleteDoc(doc(db, 'todos', id))));
+}
+
+export async function renameProject(oldName: string, newName: string) {
+	const trimmed = newName.trim();
+	if (!trimmed || trimmed === oldName) return;
+
+	const batch = writeBatch(db);
+
+	// Update todos
+	const todosSnap = await getDocs(query(collection(db, 'todos'), where('project', '==', oldName)));
+	for (const d of todosSnap.docs) {
+		batch.update(d.ref, { project: trimmed });
+	}
+
+	// Update stocks
+	const stocksSnap = await getDocs(
+		query(collection(db, 'stocks'), where('project', '==', oldName))
+	);
+	for (const d of stocksSnap.docs) {
+		batch.update(d.ref, { project: trimmed });
+	}
+
+	// Rename in projectPriorities
+	const ppDoc = await getDoc(doc(db, 'projectPriorities', oldName));
+	if (ppDoc.exists()) {
+		batch.set(doc(db, 'projectPriorities', trimmed), ppDoc.data());
+		batch.delete(doc(db, 'projectPriorities', oldName));
+	}
+
+	// Rename in archivedProjects
+	const apDoc = await getDoc(doc(db, 'archivedProjects', oldName));
+	if (apDoc.exists()) {
+		batch.set(doc(db, 'archivedProjects', trimmed), {});
+		batch.delete(doc(db, 'archivedProjects', oldName));
+	}
+
+	await batch.commit();
 }

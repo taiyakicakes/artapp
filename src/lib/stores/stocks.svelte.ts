@@ -18,6 +18,7 @@ export interface StockItem {
 	quantity: number;   // current stock (± buttons)
 	requested: number;  // amount requested/needed (number box)
 	createdAt: Date;
+	order?: number;
 }
 
 export const stocksStore = $state({
@@ -61,6 +62,10 @@ export async function updateStockItem(id: string, data: Partial<Pick<StockItem, 
 
 export async function deleteStockItem(id: string) {
 	await deleteDoc(doc(db, 'stocks', id));
+}
+
+export async function reorderStockItem(id: string, order: number) {
+	await updateDoc(doc(db, 'stocks', id), { order });
 }
 
 export async function deleteStockProject(project: string) {

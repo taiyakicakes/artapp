@@ -5,6 +5,7 @@
 		updateStockItem,
 		deleteStockItem,
 		deleteStockProject,
+		reorderStockItem,
 		type StockItem
 	} from '$lib/stores/stocks.svelte';
 	import { todosStore } from '$lib/stores/todos.svelte';
@@ -41,6 +42,133 @@
 	let collapsed = $state<Record<string, boolean>>({});
 	function toggleCollapse(project: string) {
 		collapsed[project] = !collapsed[project];
+	}
+
+	// ── Reorder mode ──
+	let reorderMode = $state<Record<string, boolean>>({});
+	function toggleReorder(project: string) {
+		reorderMode[project] = !reorderMode[project];
+	}
+
+	function getSortedItems(items: StockItem[]): StockItem[] {
+		return items.slice().sort((a, b) => {
+			const aHas = a.order !== undefined;
+			const bHas = b.order !== undefined;
+			if (aHas && bHas) return a.order! - b.order!;
+			if (aHas) return -1;
+			if (bHas) return 1;
+			return 0;
+		});
+	}
+
+	async function moveItemToIndex(project: string, itemId: string, targetIdx: number) {
+		const sorted = getSortedItems(grouped()[project]);
+		const fromIdx = sorted.findIndex((i) => i.id === itemId);
+		if (fromIdx === targetIdx) return;
+		const reordered = sorted.slice();
+		const [moved] = reordered.splice(fromIdx, 1);
+		reordered.splice(targetIdx, 0, moved);
+		await Promise.all(reordered.map((it, i) => reorderStockItem(it.id, i)));
+	}
+
+	// ── Touch drag ──
+	type DragData = {
+		id: string;
+		project: string;
+		fromIdx: number;
+		toIdx: number;
+		startY: number;
+		deltaY: number;
+		itemHeight: number;
+	};
+	let _drag: DragData | null = null;         // non-reactive, for event handlers
+	let dragRender = $state<DragData | null>(null); // reactive copy, for rendering
+
+	// Action: attaches touchstart/mousedown with passive:false so preventDefault works
+	function dragHandle(node: HTMLElement, params: { item: StockItem; project: string; idx: number }) {
+		function initDrag(clientY: number) {
+			const row = node.closest('[data-row]') as HTMLElement | null;
+			_drag = {
+				id: params.item.id,
+				project: params.project,
+				fromIdx: params.idx,
+				toIdx: params.idx,
+				startY: clientY,
+				deltaY: 0,
+				itemHeight: row?.offsetHeight ?? 48
+			};
+			dragRender = { ..._drag };
+		}
+		function touchHandler(e: TouchEvent) {
+			e.preventDefault();
+			initDrag(e.touches[0].clientY);
+			document.addEventListener('touchmove', onDragMove, { passive: false });
+			document.addEventListener('touchend', onDragEnd);
+			document.addEventListener('touchcancel', onDragEnd);
+		}
+		function mouseHandler(e: MouseEvent) {
+			e.preventDefault();
+			initDrag(e.clientY);
+			document.addEventListener('mousemove', onDragMoveM);
+			document.addEventListener('mouseup', onDragEnd);
+		}
+		node.addEventListener('touchstart', touchHandler, { passive: false });
+		node.addEventListener('mousedown', mouseHandler);
+		return {
+			update(p: { item: StockItem; project: string; idx: number }) { params = p; },
+			destroy() {
+				node.removeEventListener('touchstart', touchHandler);
+				node.removeEventListener('mousedown', mouseHandler);
+			}
+		};
+	}
+
+	function onDragMove(e: TouchEvent) {
+		if (!_drag) return;
+		e.preventDefault();
+		_drag.deltaY = e.touches[0].clientY - _drag.startY;
+		const steps = Math.round(_drag.deltaY / _drag.itemHeight);
+		const len = getSortedItems(grouped()[_drag.project]).length;
+		_drag.toIdx = Math.max(0, Math.min(len - 1, _drag.fromIdx + steps));
+		dragRender = { ..._drag };
+	}
+
+	function onDragMoveM(e: MouseEvent) {
+		if (!_drag) return;
+		_drag.deltaY = e.clientY - _drag.startY;
+		const steps = Math.round(_drag.deltaY / _drag.itemHeight);
+		const len = getSortedItems(grouped()[_drag.project]).length;
+		_drag.toIdx = Math.max(0, Math.min(len - 1, _drag.fromIdx + steps));
+		dragRender = { ..._drag };
+	}
+
+	function onDragEnd() {
+		if (!_drag) return;
+		const { id, project, fromIdx, toIdx } = _drag;
+		_drag = null;
+		dragRender = null;
+		document.removeEventListener('touchmove', onDragMove);
+		document.removeEventListener('touchend', onDragEnd);
+		document.removeEventListener('touchcancel', onDragEnd);
+		document.removeEventListener('mousemove', onDragMoveM);
+		document.removeEventListener('mouseup', onDragEnd);
+		if (fromIdx !== toIdx) moveItemToIndex(project, id, toIdx);
+	}
+
+	function getDragStyle(item: StockItem, project: string, idx: number): string {
+		const dr = dragRender;
+		if (!dr || dr.project !== project) return '';
+		if (dr.id === item.id) {
+			return `transform: translateY(${dr.deltaY}px); position: relative; z-index: 50; box-shadow: 0 8px 24px -4px rgba(0,0,0,0.15); border-radius: 8px; transition: none;`;
+		}
+		let shift = 0;
+		if (dr.fromIdx < dr.toIdx && idx > dr.fromIdx && idx <= dr.toIdx) {
+			shift = -dr.itemHeight;
+		} else if (dr.fromIdx > dr.toIdx && idx >= dr.toIdx && idx < dr.fromIdx) {
+			shift = dr.itemHeight;
+		}
+		if (shift === 0) return '';
+		return `transform: translateY(${shift}px); transition: transform 150ms ease;`;
 	}
 
 	// ── Project details modal ──
@@ -324,6 +452,11 @@
 								{stockedCnt}/{items.length} · {pct}%
 							</span>
 							<button
+								class="ml-1 rounded-lg px-2 py-1 text-xs font-bold transition-opacity active:opacity-60 {reorderMode[project] ? 'bg-teal-500 text-white' : 'bg-white/60'}"
+								onclick={() => toggleReorder(project)}
+								aria-label="Reorder items"
+							>⇅</button>
+							<button
 								class="ml-1 rounded-lg bg-white/60 px-2 py-1 text-xs font-bold transition-opacity active:opacity-60"
 								onclick={() => openDetails(project)}
 							>•••</button>
@@ -346,12 +479,36 @@
 								</div>
 							</div>
 							<div class="divide-y divide-gray-50">
-								{#each items.slice().sort((a, b) => {
+								{#each (reorderMode[project] ? getSortedItems(items) : items.slice().sort((a, b) => {
 									const aOk = getQty(a) >= getReq(a);
 									const bOk = getQty(b) >= getReq(b);
-									return aOk === bOk ? 0 : aOk ? 1 : -1;
-								}) as item (item.id)}
-									<div class="flex items-center gap-3 px-4 py-2.5 {getQty(item) >= getReq(item) ? 'bg-emerald-50' : ''}">
+									if (aOk === bOk) {
+										const aOrder = a.order ?? items.indexOf(a);
+										const bOrder = b.order ?? items.indexOf(b);
+										return aOrder - bOrder;
+									}
+									return aOk ? 1 : -1;
+								})) as item, idx (item.id)}
+									<div
+										data-row
+										class="flex items-center gap-3 px-4 py-2.5 {getQty(item) >= getReq(item) && !reorderMode[project] ? 'bg-emerald-50' : ''} {dragRender?.id === item.id ? 'bg-white opacity-90' : ''}"
+										style={getDragStyle(item, project, idx)}
+									>
+										{#if reorderMode[project]}
+											<div
+												role="button"
+												tabindex="-1"
+												class="touch-none flex cursor-grab items-center justify-center px-1 text-gray-300 active:cursor-grabbing"
+												use:dragHandle={{ item, project, idx }}
+												aria-label="Drag to reorder"
+											>
+												<svg width="16" height="20" viewBox="0 0 16 20" fill="currentColor">
+													<circle cx="5" cy="4" r="1.5"/><circle cx="11" cy="4" r="1.5"/>
+													<circle cx="5" cy="10" r="1.5"/><circle cx="11" cy="10" r="1.5"/>
+													<circle cx="5" cy="16" r="1.5"/><circle cx="11" cy="16" r="1.5"/>
+												</svg>
+											</div>
+										{/if}
 										<button
 											class="flex-1 text-left text-sm font-semibold text-gray-700 active:opacity-60"
 											onclick={() => openEdit(item)}

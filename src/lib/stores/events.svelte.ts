@@ -11,7 +11,7 @@ import {
 	serverTimestamp
 } from 'firebase/firestore';
 
-export type EventStatus = 'none' | 'applied' | 'accepted' | 'waitlisted' | 'rejected';
+export type EventStatus = 'none' | 'to_apply' | 'applied' | 'accepted' | 'waitlisted' | 'rejected';
 
 export type EventType = 'standard' | 'application';
 
@@ -79,7 +79,7 @@ export async function toggleApplied(id: string, applied: boolean) {
 }
 
 export async function updateEventStatus(id: string, status: EventStatus) {
-	const update: Record<string, unknown> = { status, applied: status !== 'none' };
+	const update: Record<string, unknown> = { status, applied: status !== 'none' && status !== 'to_apply' };
 	// Auto-convert application → standard when outcome is known
 	if (status === 'accepted' || status === 'rejected') {
 		update.eventType = 'standard';

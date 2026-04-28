@@ -57,6 +57,13 @@
 		});
 	});
 
+	const noDateApps = $derived(() =>
+		filtered().filter((e) => (e.eventType ?? 'standard') === 'application' && !e.date)
+	);
+	const datedEvents = $derived(() =>
+		filtered().filter((e) => !((e.eventType ?? 'standard') === 'application' && !e.date))
+	);
+
 	// ── Expanded ──
 	let expanded = $state<Record<string, boolean>>({});
 
@@ -85,6 +92,7 @@
 
 	const statusCfg: Record<EventStatus, { label: string; cls: string; activeCls: string }> = {
 		none: { label: 'None', cls: 'border-2 border-dashed border-gray-200 text-gray-400', activeCls: 'border-gray-300 bg-gray-100 text-gray-600' },
+		to_apply: { label: '📝 To Apply', cls: 'bg-violet-100 text-violet-600', activeCls: 'border-violet-300 bg-violet-100 text-violet-600' },
 		applied: { label: '📨 Applied', cls: 'bg-blue-100 text-blue-600', activeCls: 'border-blue-300 bg-blue-100 text-blue-600' },
 		accepted: { label: '🎉 Accepted', cls: 'bg-emerald-100 text-emerald-600', activeCls: 'border-emerald-300 bg-emerald-100 text-emerald-600' },
 		waitlisted: { label: '⏳ Waitlisted', cls: 'bg-amber-100 text-amber-600', activeCls: 'border-amber-300 bg-amber-100 text-amber-600' },
@@ -183,7 +191,7 @@
 				location: form.location.trim(),
 				eventType: form.eventType,
 				status: form.status,
-				applied: form.status !== 'none',
+				applied: form.status !== 'none' && form.status !== 'to_apply',
 				applicationDueDate: form.applicationDueDate || null,
 				revenue: form.revenue ? Number(form.revenue) : null,
 				requirements: form.requirements,
@@ -286,10 +294,16 @@
 			</div>
 		{:else}
 			<div class="flex flex-col gap-3">
-				{#each filtered() as event (event.id)}
+				{#each [...noDateApps(), ...datedEvents()] as event, i (event.id)}
+					{#if i === 0 && noDateApps().length > 0}
+						<p class="text-xs font-extrabold uppercase tracking-wide text-indigo-400">📋 Date Not Yet Announced</p>
+					{/if}
+					{#if i === noDateApps().length && noDateApps().length > 0 && datedEvents().length > 0}
+						<p class="mt-1 text-xs font-extrabold uppercase tracking-wide text-gray-400">📅 Scheduled</p>
+					{/if}
 					{@const prog = eventProgress(event)}
 					{@const status = getEventStatus(event)}
-					{@const isPast = event.date < today}
+					{@const isPast = !!event.date && event.date < today}
 					{@const cashTxns = cashStore.transactions.filter((t) => t.eventId === event.id)}
 					{@const cashIn = cashTxns.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0)}
 					{@const cashOut = cashTxns.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0)}
@@ -328,6 +342,8 @@
 									<span class="flex items-center gap-1 text-sm font-semibold {isPast ? 'text-gray-400' : 'text-gray-500'}">
 										📅 {isApplication ? 'Event:' : ''}{formatDate(event.date)}{isPast ? ' · Past' : ''}
 									</span>
+								{:else if isApplication}
+									<span class="flex items-center gap-1 text-sm font-semibold text-indigo-300">📅 Date TBD</span>
 								{/if}
 								{#if event.location}
 									<span class="flex items-center gap-1 text-sm font-semibold text-gray-500">
@@ -529,7 +545,7 @@
 		<!-- Application Due Date (prominent for application type) -->
 		{#if form.eventType === 'application'}
 			<div>
-				<label class="mb-1.5 block text-sm font-bold text-indigo-600" for="event-appdue-top">Application Due Date *</label>
+				<label class="mb-1.5 block text-sm font-bold text-indigo-600" for="event-appdue-top">Application Due Date</label>
 				<input id="event-appdue-top" type="date" bind:value={form.applicationDueDate}
 					class="w-full rounded-xl border-2 border-indigo-200 bg-indigo-50 px-3 py-3 text-sm font-semibold text-gray-700 outline-none focus:border-indigo-400" />
 			</div>
@@ -539,7 +555,7 @@
 		<div class="grid grid-cols-2 gap-3">
 			<div>
 				<label class="mb-1.5 block text-sm font-bold text-gray-600" for="event-date">
-					{form.eventType === 'application' ? 'Event Date (if accepted)' : 'Event Date *'}
+					{form.eventType === 'application' ? 'Event Date (optional)' : 'Event Date *'}
 				</label>
 				<input id="event-date" type="date" bind:value={form.date}
 					class="w-full rounded-xl border-2 border-violet-100 bg-violet-50 px-3 py-3 text-sm font-semibold text-gray-700 outline-none focus:border-violet-400" />
@@ -660,7 +676,7 @@
 
 		<button
 			onclick={handleSave}
-			disabled={!form.name.trim() || !form.date || saving}
+			disabled={!form.name.trim() || (form.eventType !== 'application' && !form.date) || saving}
 			class="mt-1 w-full rounded-2xl bg-violet-500 py-4 text-base font-extrabold text-white shadow-md transition-all active:scale-95 disabled:opacity-50"
 		>{saving ? 'Saving...' : editingEvent ? 'Save Changes ✨' : 'Add Event 🎪'}</button>
 	</div>

@@ -74,7 +74,11 @@
 	let newProject = $state('');
 	let newTask = $state('');
 	let newPriority = $state<Priority>('medium');
-	let existingProjects = $derived(projects);
+	let existingProjects = $derived(
+		newProject.trim()
+			? projects.filter((p) => p.toLowerCase().includes(newProject.toLowerCase().trim()))
+			: projects
+	);
 	let showProjectDropdown = $state(false);
 	let saving = $state(false);
 
@@ -252,7 +256,8 @@
 			<h1 class="text-3xl font-black">My Projects</h1>
 		</div>
 		<div class="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-sm font-semibold text-pink-100">
-			<span>{todosStore.todos.filter((t) => t.done).length} / {todosStore.todos.length} tasks done</span>
+			{@const activeTodos = todosStore.todos.filter((t) => !archivedProjectsStore.archived.has(t.project))}
+			<span>{activeTodos.filter((t) => t.done).length} / {activeTodos.length} tasks done</span>
 			{#if stocksStore.items.length > 0}
 				{@const allStocked = stocksStore.items.filter((s) => (s.quantity ?? 0) >= (s.requested ?? 0)).length}
 				<span>📦 {allStocked} / {stocksStore.items.length} stocked · {Math.round((allStocked / stocksStore.items.length) * 100)}%</span>

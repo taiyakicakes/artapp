@@ -18,6 +18,11 @@
 	import Modal from '$lib/components/Modal.svelte';
 
 	const today = new Date().toISOString().slice(0, 10);
+	const oneWeekAgo = (() => {
+		const d = new Date();
+		d.setDate(d.getDate() - 7);
+		return d.toISOString().slice(0, 10);
+	})();
 
 	const allProjects = $derived([...new Set(todosStore.todos.map((t) => t.project))].sort());
 
@@ -45,7 +50,8 @@
 		const q = searchQuery.toLowerCase();
 		return eventsStore.events.filter((e) => {
 			let statusMatch = true;
-			if (filterStatus === 'upcoming') statusMatch = !!e.date && e.date >= today;
+			if (filterStatus === 'all') statusMatch = !e.date || e.date >= oneWeekAgo;
+			else if (filterStatus === 'upcoming') statusMatch = !!e.date && e.date >= today;
 			else if (filterStatus === 'past') statusMatch = !!e.date && e.date < today;
 			else if (filterStatus === 'applications') statusMatch = (e.eventType ?? 'standard') === 'application';
 			else if (filterStatus === 'applied') statusMatch = getEventStatus(e) === 'applied';

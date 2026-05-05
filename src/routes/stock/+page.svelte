@@ -20,7 +20,7 @@
 		const set = new Set<string>();
 		for (const t of todosStore.todos) set.add(t.project);
 		for (const s of stocksStore.items) set.add(s.project);
-		return Array.from(set);
+		return Array.from(set).filter((p) => !archivedProjectsStore.archived.has(p));
 	});
 
 	// Group stock by project
@@ -184,11 +184,14 @@
 	let importResult = $state('');
 	let csvInput: HTMLInputElement;
 
+	const unarchivedItems = $derived(
+		stocksStore.items.filter((s) => !archivedProjectsStore.archived.has(s.project))
+	);
 	const totalStocked = $derived(
-		stocksStore.items.filter((s) => (s.quantity ?? 0) >= (s.requested ?? 0)).length
+		unarchivedItems.filter((s) => (s.quantity ?? 0) >= (s.requested ?? 0)).length
 	);
 	const totalPct = $derived(
-		stocksStore.items.length > 0 ? Math.round((totalStocked / stocksStore.items.length) * 100) : 0
+		unarchivedItems.length > 0 ? Math.round((totalStocked / unarchivedItems.length) * 100) : 0
 	);
 
 	function barColor(pct: number): string {
@@ -411,7 +414,7 @@
 			<h1 class="text-3xl font-black">Stock</h1>
 		</div>
 		<p class="mt-1 text-sm font-semibold text-teal-100">
-			{totalStocked} / {stocksStore.items.length} stocked · {totalPct}%
+			{totalStocked} / {unarchivedItems.length} stocked · {totalPct}%
 		</p>
 	</div>
 
@@ -574,9 +577,9 @@
 					placeholder="e.g. Sticker Sheet"
 					class="w-full rounded-xl border-2 border-teal-100 bg-teal-50 px-4 py-3 font-semibold text-gray-700 outline-none focus:border-teal-400"
 				/>
-				{#if showProjectDropdown && projects().length > 0}
+				{#if showProjectDropdown && projects().filter(p => p.toLowerCase().includes(newProject.toLowerCase())).length > 0}
 					<div class="absolute left-0 right-0 top-full z-10 mt-1 overflow-hidden rounded-xl border border-teal-100 bg-white shadow-lg">
-						{#each projects() as p (p)}
+						{#each projects().filter(p => p.toLowerCase().includes(newProject.toLowerCase())) as p (p)}
 							<button
 								class="w-full px-4 py-3 text-left text-sm font-semibold text-gray-700 hover:bg-teal-50"
 								onmousedown={() => { newProject = p; showProjectDropdown = false; }}

@@ -69,6 +69,10 @@
 			.sort()
 	);
 
+	const activeTodos = $derived(
+		todosStore.todos.filter((t) => !archivedProjectsStore.archived.has(t.project))
+	);
+
 	// ── Add task modal ──
 	let addOpen = $state(false);
 	let newProject = $state('');
@@ -256,7 +260,6 @@
 			<h1 class="text-3xl font-black">My Projects</h1>
 		</div>
 		<div class="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-sm font-semibold text-pink-100">
-			{@const activeTodos = todosStore.todos.filter((t) => !archivedProjectsStore.archived.has(t.project))}
 			<span>{activeTodos.filter((t) => t.done).length} / {activeTodos.length} tasks done</span>
 			{#if stocksStore.items.length > 0}
 				{@const allStocked = stocksStore.items.filter((s) => (s.quantity ?? 0) >= (s.requested ?? 0)).length}

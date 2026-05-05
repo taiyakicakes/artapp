@@ -12,6 +12,7 @@
 		type EventType
 	} from '$lib/stores/events.svelte';
 	import { todosStore } from '$lib/stores/todos.svelte';
+	import { archivedProjectsStore } from '$lib/stores/archivedProjects.svelte';
 	import { goto } from '$app/navigation';
 	import { cashStore } from '$lib/stores/cashTransactions.svelte';
 	import { settingsStore } from '$lib/stores/settings.svelte';
@@ -20,11 +21,15 @@
 	const today = new Date().toISOString().slice(0, 10);
 	const oneWeekAgo = (() => {
 		const d = new Date();
-		d.setDate(d.getDate() - 7);
+		d.setDate(d.getDate() - 4);
 		return d.toISOString().slice(0, 10);
 	})();
 
-	const allProjects = $derived([...new Set(todosStore.todos.map((t) => t.project))].sort());
+	const allProjects = $derived(
+		[...new Set(todosStore.todos.map((t) => t.project))]
+			.filter((p) => !archivedProjectsStore.archived.has(p))
+			.sort()
+	);
 
 	function eventProgress(event: ArtEvent) {
 		if (!event.linkedProjects?.length) return null;
@@ -50,9 +55,9 @@
 		const q = searchQuery.toLowerCase();
 		return eventsStore.events.filter((e) => {
 			let statusMatch = true;
-			if (filterStatus === 'all') statusMatch = !e.date || e.date >= oneWeekAgo;
-			else if (filterStatus === 'upcoming') statusMatch = !!e.date && e.date >= today;
-			else if (filterStatus === 'past') statusMatch = !!e.date && e.date < today;
+			if (filterStatus === 'all') statusMatch = !e.forcePast && (!e.date || e.date >= oneWeekAgo);
+			else if (filterStatus === 'upcoming') statusMatch = !e.forcePast && !!e.date && e.date >= today;
+			else if (filterStatus === 'past') statusMatch = !!e.forcePast || (!!e.date && e.date < today);
 			else if (filterStatus === 'applications') statusMatch = (e.eventType ?? 'standard') === 'application';
 			else if (filterStatus === 'applied') statusMatch = getEventStatus(e) === 'applied';
 			else if (filterStatus === 'accepted') statusMatch = getEventStatus(e) === 'accepted';
@@ -122,10 +127,13 @@
 		cost: '',
 		travelCost: '',
 		notes: '',
-		linkedProjects: [] as string[]
+		linkedProjects: [] as string[],
+		forcePast: false,
+		endDate: ''
 	});
 	let newRequirement = $state('');
 	let newLink = $state('');
+	let projectSearch = $state('');
 	let saving = $state(false);
 
 	function openAdd() {
@@ -134,10 +142,11 @@
 			name: '', date: '', location: '',
 			eventType: 'standard', status: 'none', applicationDueDate: '', revenue: '',
 			requirements: [], links: [], cost: '', travelCost: '',
-			notes: '', linkedProjects: []
+			notes: '', linkedProjects: [], forcePast: false, endDate: ''
 		};
 		newRequirement = '';
 		newLink = '';
+		projectSearch = '';
 		modalOpen = true;
 	}
 
@@ -156,10 +165,13 @@
 			cost: event.cost != null ? String(event.cost) : '',
 			travelCost: event.travelCost != null ? String(event.travelCost) : '',
 			notes: event.notes,
-			linkedProjects: [...(event.linkedProjects ?? [])]
+			linkedProjects: [...(event.linkedProjects ?? [])],
+			forcePast: event.forcePast ?? false,
+			endDate: event.endDate ?? ''
 		};
 		newRequirement = '';
 		newLink = '';
+		projectSearch = '';
 		modalOpen = true;
 	}
 
@@ -205,7 +217,9 @@
 				cost: form.cost ? Number(form.cost) : null,
 				travelCost: form.travelCost ? Number(form.travelCost) : null,
 				notes: form.notes.trim(),
-				linkedProjects: form.linkedProjects
+				linkedProjects: form.linkedProjects,
+				forcePast: form.forcePast,
+				endDate: form.endDate || null
 			};
 			if (editingEvent) {
 				await updateEvent(editingEvent.id, data);
@@ -549,7 +563,7 @@
 		</div>
 
 		<!-- Application Due Date (prominent for application type) -->
-		{#if form.eventType === 'application'}
+		{#if form.eventType === 'application' && form.status !== 'accepted'}
 			<div>
 				<label class="mb-1.5 block text-sm font-bold text-indigo-600" for="event-appdue-top">Application Due Date</label>
 				<input id="event-appdue-top" type="date" bind:value={form.applicationDueDate}
@@ -557,7 +571,7 @@
 			</div>
 		{/if}
 
-		<!-- Date + Location -->
+		<!-- Date range -->
 		<div class="grid grid-cols-2 gap-3">
 			<div>
 				<label class="mb-1.5 block text-sm font-bold text-gray-600" for="event-date">
@@ -567,14 +581,21 @@
 					class="w-full rounded-xl border-2 border-violet-100 bg-violet-50 px-3 py-3 text-sm font-semibold text-gray-700 outline-none focus:border-violet-400" />
 			</div>
 			<div>
-				<label class="mb-1.5 block text-sm font-bold text-gray-600" for="event-location">Location</label>
-				<input id="event-location" type="text" bind:value={form.location} placeholder="City, State"
+				<label class="mb-1.5 block text-sm font-bold text-gray-600" for="event-enddate">End Date</label>
+				<input id="event-enddate" type="date" bind:value={form.endDate}
 					class="w-full rounded-xl border-2 border-violet-100 bg-violet-50 px-3 py-3 text-sm font-semibold text-gray-700 outline-none focus:border-violet-400" />
 			</div>
 		</div>
 
+		<!-- Location -->
+		<div>
+			<label class="mb-1.5 block text-sm font-bold text-gray-600" for="event-location">Location</label>
+			<input id="event-location" type="text" bind:value={form.location} placeholder="City, State"
+				class="w-full rounded-xl border-2 border-violet-100 bg-violet-50 px-3 py-3 text-sm font-semibold text-gray-700 outline-none focus:border-violet-400" />
+		</div>
+
 		<!-- Application Due Date (standard type, secondary) -->
-		{#if form.eventType === 'standard'}
+		{#if form.eventType === 'standard' && form.status !== 'accepted'}
 			<div>
 				<label class="mb-1.5 block text-sm font-bold text-gray-600" for="event-appdue">Application Due Date</label>
 				<input id="event-appdue" type="date" bind:value={form.applicationDueDate}
@@ -657,8 +678,14 @@
 		{#if allProjects.length > 0}
 			<div>
 				<p class="mb-1.5 text-sm font-bold text-gray-600">Linked Projects</p>
+				<input
+					type="text"
+					bind:value={projectSearch}
+					placeholder="Search projects..."
+					class="mb-2 w-full rounded-xl border-2 border-violet-100 bg-violet-50 px-3 py-2 text-sm font-semibold text-gray-700 outline-none focus:border-violet-400"
+				/>
 				<div class="flex flex-wrap gap-2">
-					{#each allProjects as project (project)}
+					{#each allProjects.filter(p => p.toLowerCase().includes(projectSearch.toLowerCase())) as project (project)}
 						{@const linked = form.linkedProjects.includes(project)}
 						<button type="button"
 							class="rounded-xl border-2 px-3 py-1.5 text-sm font-bold transition-all active:scale-95 {linked ? 'border-violet-300 bg-violet-100 text-violet-700' : 'border-gray-100 bg-gray-50 text-gray-400'}"
@@ -679,6 +706,16 @@
 			<textarea id="event-notes" bind:value={form.notes} placeholder="Any extra details..." rows="3"
 				class="w-full resize-none rounded-xl border-2 border-violet-100 bg-violet-50 px-4 py-3 text-sm font-semibold text-gray-700 outline-none focus:border-violet-400"></textarea>
 		</div>
+
+		<!-- Force Past -->
+		<button
+			type="button"
+			onclick={() => (form.forcePast = !form.forcePast)}
+			class="flex w-full items-center gap-3 rounded-xl border-2 px-4 py-3 text-sm font-bold transition-all active:scale-95 {form.forcePast ? 'border-gray-300 bg-gray-100 text-gray-700' : 'border-gray-100 bg-gray-50 text-gray-400'}"
+		>
+			<span class="text-lg leading-none">{form.forcePast ? '✅' : '⬜'}</span>
+			Move to Past
+		</button>
 
 		<button
 			onclick={handleSave}

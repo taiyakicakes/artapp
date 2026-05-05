@@ -30,7 +30,9 @@ export interface ArtEvent {
 	cost: number | null;
 	travelCost: number | null;
 	notes: string;
+	endDate?: string | null;
 	linkedProjects: string[];
+	forcePast?: boolean;
 	createdAt: Date;
 }
 

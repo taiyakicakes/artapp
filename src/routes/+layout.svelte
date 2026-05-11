@@ -6,6 +6,7 @@
 	import { subscribeEvents, unsubscribeEvents } from '$lib/stores/events.svelte';
 	import { subscribeStocks, unsubscribeStocks } from '$lib/stores/stocks.svelte';
 	import { subscribeLinks, unsubscribeLinks } from '$lib/stores/links.svelte';
+	import { subscribeAppLinks, unsubscribeAppLinks } from '$lib/stores/appLinks.svelte';
 	import { subscribeProjectPriorities, unsubscribeProjectPriorities } from '$lib/stores/projectPriorities.svelte';
 	import { subscribeArchivedProjects, unsubscribeArchivedProjects } from '$lib/stores/archivedProjects.svelte';
 	import { subscribeCash, unsubscribeCash } from '$lib/stores/cashTransactions.svelte';
@@ -21,6 +22,7 @@
 			subscribeEvents();
 			subscribeStocks();
 			subscribeLinks();
+			subscribeAppLinks();
 			subscribeProjectPriorities();
 			subscribeArchivedProjects();
 			subscribeCash();
@@ -30,6 +32,7 @@
 			unsubscribeEvents();
 			unsubscribeStocks();
 			unsubscribeLinks();
+			unsubscribeAppLinks();
 			unsubscribeProjectPriorities();
 			unsubscribeArchivedProjects();
 			unsubscribeCash();

@@ -21,6 +21,13 @@
 		<h2 class="mb-4 text-xl font-extrabold text-gray-800">More ✨</h2>
 		<div class="flex flex-col gap-2">
 			<a
+				href="/apps"
+				onclick={() => (menuOpen = false)}
+				class="flex items-center gap-3 rounded-2xl bg-violet-50 px-4 py-3 text-base font-bold text-violet-700 transition-colors active:bg-violet-100"
+			>
+				App Links
+			</a>
+			<a
 				href="/calendar"
 				onclick={() => (menuOpen = false)}
 				class="flex items-center gap-3 rounded-2xl bg-teal-50 px-4 py-3 text-base font-bold text-teal-700 transition-colors active:bg-teal-100"
@@ -74,7 +81,7 @@
 	</a>
 	<button
 		onclick={() => (menuOpen = !menuOpen)}
-		class="flex flex-1 flex-col items-center gap-0.5 py-3 transition-colors {page.url.pathname.startsWith('/calendar') || page.url.pathname.startsWith('/settings') || menuOpen ? 'text-pink-500' : 'text-gray-400'}"
+		class="flex flex-1 flex-col items-center gap-0.5 py-3 transition-colors {page.url.pathname.startsWith('/calendar') || page.url.pathname.startsWith('/settings') || page.url.pathname.startsWith('/apps') || menuOpen ? 'text-pink-500' : 'text-gray-400'}"
 	>
 		<span class="text-2xl leading-none">☰</span>
 		<span class="text-xs font-bold">More</span>

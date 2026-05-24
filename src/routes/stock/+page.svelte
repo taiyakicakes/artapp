@@ -33,9 +33,17 @@
 		return map;
 	});
 
-	// Only show non-archived stock projects
+	// Only show non-archived stock projects; 100% complete go last
 	const stockProjects = $derived(
-		Object.keys(grouped()).filter((p) => !archivedProjectsStore.archived.has(p))
+		Object.keys(grouped())
+			.filter((p) => !archivedProjectsStore.archived.has(p))
+			.sort((a, b) => {
+				const aItems = grouped()[a];
+				const bItems = grouped()[b];
+				const aComplete = aItems.length > 0 && aItems.every((s) => (s.quantity ?? 0) >= (s.requested ?? 0));
+				const bComplete = bItems.length > 0 && bItems.every((s) => (s.quantity ?? 0) >= (s.requested ?? 0));
+				return Number(aComplete) - Number(bComplete);
+			})
 	);
 
 	// ── Collapsible ──

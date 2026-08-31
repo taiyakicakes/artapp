@@ -11,7 +11,8 @@
 	import { todosStore } from '$lib/stores/todos.svelte';
 	import { renameProject } from '$lib/stores/todos.svelte';
 	import { renameProjectInEvents } from '$lib/stores/events.svelte';
-	import { archivedProjectsStore } from '$lib/stores/archivedProjects.svelte';
+	import { archivedProjectsStore, archiveProject, unarchiveProject } from '$lib/stores/archivedProjects.svelte';
+	import { stockProjectOrderStore, setStockProjectOrder } from '$lib/stores/stockProjectOrder.svelte';
 	import { settingsStore } from '$lib/stores/settings.svelte';
 	import Modal from '$lib/components/Modal.svelte';
 
@@ -33,17 +34,28 @@
 		return map;
 	});
 
-	// Only show non-archived stock projects; 100% complete go last
+	// Only show non-archived stock projects; manual order wins, then complete go last
 	const stockProjects = $derived(
 		Object.keys(grouped())
 			.filter((p) => !archivedProjectsStore.archived.has(p))
 			.sort((a, b) => {
+				const aOrder = stockProjectOrderStore.order[a];
+				const bOrder = stockProjectOrderStore.order[b];
+				const aHas = aOrder !== undefined;
+				const bHas = bOrder !== undefined;
+				if (aHas && bHas) return aOrder - bOrder;
+				if (aHas) return -1;
+				if (bHas) return 1;
 				const aItems = grouped()[a];
 				const bItems = grouped()[b];
 				const aComplete = aItems.length > 0 && aItems.every((s) => (s.quantity ?? 0) >= (s.requested ?? 0));
 				const bComplete = bItems.length > 0 && bItems.every((s) => (s.quantity ?? 0) >= (s.requested ?? 0));
 				return Number(aComplete) - Number(bComplete);
 			})
+	);
+
+	const archivedStockProjects = $derived(
+		Object.keys(grouped()).filter((p) => archivedProjectsStore.archived.has(p))
 	);
 
 	// ── Collapsible ──
@@ -56,6 +68,51 @@
 	let reorderMode = $state<Record<string, boolean>>({});
 	function toggleReorder(project: string) {
 		reorderMode[project] = !reorderMode[project];
+	}
+
+	// ── Project reorder mode ──
+	let projectReorderMode = $state(false);
+
+	async function moveProjectUp(project: string) {
+		const idx = stockProjects.indexOf(project);
+		if (idx <= 0) return;
+		const newOrder = [...stockProjects];
+		newOrder.splice(idx, 1);
+		newOrder.splice(idx - 1, 0, project);
+		await Promise.all(newOrder.map((p, i) => setStockProjectOrder(p, i)));
+	}
+
+	async function moveProjectDown(project: string) {
+		const idx = stockProjects.indexOf(project);
+		if (idx >= stockProjects.length - 1) return;
+		const newOrder = [...stockProjects];
+		newOrder.splice(idx, 1);
+		newOrder.splice(idx + 1, 0, project);
+		await Promise.all(newOrder.map((p, i) => setStockProjectOrder(p, i)));
+	}
+
+	// ── Archive ──
+	let showArchived = $state(false);
+	let archiving = $state(false);
+
+	async function handleArchive() {
+		archiving = true;
+		try {
+			await archiveProject(detailsProject);
+			detailsOpen = false;
+		} finally {
+			archiving = false;
+		}
+	}
+
+	async function handleUnarchive() {
+		archiving = true;
+		try {
+			await unarchiveProject(detailsProject);
+			detailsOpen = false;
+		} finally {
+			archiving = false;
+		}
 	}
 
 	function getSortedItems(items: StockItem[]): StockItem[] {
@@ -183,6 +240,7 @@
 	let detailsOpen = $state(false);
 	let detailsProject = $state('');
 	let confirmDelete = $state(false);
+	const detailsIsArchived = $derived(archivedProjectsStore.archived.has(detailsProject));
 	let deleting = $state(false);
 	let renameInput = $state('');
 	let renaming = $state(false);
@@ -427,12 +485,19 @@
 	</div>
 
 	<div class="px-4 py-5">
-		<button
-			onclick={() => openAdd()}
-			class="mb-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-teal-500 py-3.5 text-base font-extrabold text-white shadow-sm transition-all active:scale-95"
-		>
-			<span class="text-xl leading-none">+</span> New Stock Item
-		</button>
+		<div class="mb-4 flex gap-2">
+			<button
+				onclick={() => openAdd()}
+				class="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-teal-500 py-3.5 text-base font-extrabold text-white shadow-sm transition-all active:scale-95"
+			>
+				<span class="text-xl leading-none">+</span> New Stock Item
+			</button>
+			<button
+				onclick={() => (projectReorderMode = !projectReorderMode)}
+				class="flex items-center gap-1.5 rounded-2xl px-4 py-3.5 text-sm font-extrabold shadow-sm transition-all active:scale-95 {projectReorderMode ? 'bg-teal-500 text-white' : 'bg-white text-teal-600'}"
+				aria-label="Toggle project reorder"
+			>⇅</button>
+		</div>
 
 		{#if stocksStore.loading}
 			<div class="flex justify-center py-12">
@@ -452,30 +517,52 @@
 					{@const pct = items.length > 0 ? Math.round((stockedCnt / items.length) * 100) : 0}
 					<div class="overflow-hidden rounded-2xl bg-white shadow-sm">
 						<div class="flex items-center {getProjectColor(project)}">
+							{#if projectReorderMode}
+								<div class="flex items-center gap-1 pl-2">
+									<button
+										onclick={() => moveProjectUp(project)}
+										disabled={stockProjects.indexOf(project) === 0}
+										class="flex h-8 w-8 items-center justify-center rounded-lg bg-white/60 text-base font-black transition-opacity active:opacity-60 disabled:opacity-30"
+										aria-label="Move project up"
+									>↑</button>
+									<button
+										onclick={() => moveProjectDown(project)}
+										disabled={stockProjects.indexOf(project) === stockProjects.length - 1}
+										class="flex h-8 w-8 items-center justify-center rounded-lg bg-white/60 text-base font-black transition-opacity active:opacity-60 disabled:opacity-30"
+										aria-label="Move project down"
+									>↓</button>
+								</div>
+							{/if}
 							<button
 								class="flex flex-1 items-center gap-2 px-4 py-3 text-base font-bold transition-opacity active:opacity-70"
 								onclick={() => toggleCollapse(project)}
 							>
-								<span>{collapsed[project] ? '▶' : '▼'}</span>
+								{#if !projectReorderMode}<span>{collapsed[project] ? '▶' : '▼'}</span>{/if}
 								{project}
 							</button>
 							<span class="rounded-full bg-white/60 px-2.5 py-0.5 text-xs font-extrabold">
 								{stockedCnt}/{items.length} · {pct}%
 							</span>
-							<button
-								class="ml-1 rounded-lg px-2 py-1 text-xs font-bold transition-opacity active:opacity-60 {reorderMode[project] ? 'bg-teal-500 text-white' : 'bg-white/60'}"
-								onclick={() => toggleReorder(project)}
-								aria-label="Reorder items"
-							>⇅</button>
+							{#if !projectReorderMode}
+								<button
+									class="ml-1 rounded-lg px-2 py-1 text-xs font-bold transition-opacity active:opacity-60 {reorderMode[project] ? 'bg-teal-500 text-white' : 'bg-white/60'}"
+									onclick={() => toggleReorder(project)}
+									aria-label="Reorder items"
+								>⇅</button>
+							{/if}
 							<button
 								class="ml-1 rounded-lg bg-white/60 px-2 py-1 text-xs font-bold transition-opacity active:opacity-60"
 								onclick={() => openDetails(project)}
 							>•••</button>
-							<button
-								class="ml-1 mr-3 flex h-9 w-9 items-center justify-center rounded-full bg-white/80 text-2xl font-black leading-none shadow-sm transition-transform active:scale-90"
-								onclick={() => openAdd(project)}
-								aria-label="Add item to {project}"
-							>+</button>
+							{#if !projectReorderMode}
+								<button
+									class="ml-1 mr-3 flex h-9 w-9 items-center justify-center rounded-full bg-white/80 text-2xl font-black leading-none shadow-sm transition-transform active:scale-90"
+									onclick={() => openAdd(project)}
+									aria-label="Add item to {project}"
+								>+</button>
+							{:else}
+								<div class="mr-3"></div>
+							{/if}
 						</div>
 						<div class="h-1.5 w-full bg-gray-100">
 							<div class="h-full transition-all {barColor(pct)}" style="width: {pct}%"></div>
@@ -567,6 +654,40 @@
 				{/each}
 			</div>
 		{/if}
+
+	{#if archivedStockProjects.length > 0}
+		<div class="mt-4">
+			<button
+				onclick={() => (showArchived = !showArchived)}
+				class="flex w-full items-center justify-between rounded-2xl bg-gray-100 px-4 py-3 text-sm font-bold text-gray-500 transition-opacity active:opacity-70"
+			>
+				<span>{showArchived ? '▼' : '▶'} Archived Projects</span>
+				<span class="rounded-full bg-gray-200 px-2.5 py-0.5 text-xs font-extrabold">{archivedStockProjects.length}</span>
+			</button>
+			{#if showArchived}
+				<div class="mt-2 flex flex-col gap-2">
+					{#each archivedStockProjects as project (project)}
+						{@const archItems = grouped()[project] ?? []}
+						{@const archStocked = archItems.filter((s) => (s.quantity ?? 0) >= (s.requested ?? 0)).length}
+						<div class="flex items-center gap-2 rounded-2xl bg-gray-50 px-4 py-3">
+							<div class="flex-1">
+								<p class="text-sm font-bold text-gray-500">{project}</p>
+								<p class="text-xs text-gray-400">{archItems.length} item{archItems.length === 1 ? '' : 's'} · {archStocked} stocked</p>
+							</div>
+							<button
+								onclick={() => openDetails(project)}
+								class="rounded-lg bg-gray-200 px-2 py-1.5 text-xs font-bold text-gray-500 transition-opacity active:opacity-60"
+							>•••</button>
+							<button
+								onclick={() => unarchiveProject(project)}
+								class="rounded-xl bg-teal-500 px-3 py-1.5 text-xs font-bold text-white transition-opacity active:opacity-60"
+							>Unarchive</button>
+						</div>
+					{/each}
+				</div>
+			{/if}
+		</div>
+	{/if}
 	</div>
 </div>
 
@@ -689,6 +810,20 @@
 				<p class="text-sm font-bold {importResult.startsWith('✅') ? 'text-emerald-600' : 'text-red-500'}">{importResult}</p>
 			{/if}
 		</div>
+
+		{#if detailsIsArchived}
+			<button
+				onclick={handleUnarchive}
+				disabled={archiving}
+				class="w-full rounded-2xl border-2 border-teal-100 bg-teal-50 py-3.5 text-base font-bold text-teal-600 transition-all active:scale-95 disabled:opacity-50"
+			>{archiving ? '…' : 'Unarchive Project'}</button>
+		{:else}
+			<button
+				onclick={handleArchive}
+				disabled={archiving}
+				class="w-full rounded-2xl border-2 border-amber-100 bg-amber-50 py-3.5 text-base font-bold text-amber-600 transition-all active:scale-95 disabled:opacity-50"
+			>{archiving ? '…' : 'Archive Project'}</button>
+		{/if}
 
 		<button onclick={handleDeleteProject} disabled={deleting}
 			class="w-full rounded-2xl border-2 py-4 text-base font-extrabold transition-all active:scale-95 disabled:opacity-50

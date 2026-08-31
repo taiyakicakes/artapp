@@ -9,6 +9,7 @@
 	import { subscribeAppLinks, unsubscribeAppLinks } from '$lib/stores/appLinks.svelte';
 	import { subscribeProjectPriorities, unsubscribeProjectPriorities } from '$lib/stores/projectPriorities.svelte';
 	import { subscribeArchivedProjects, unsubscribeArchivedProjects } from '$lib/stores/archivedProjects.svelte';
+	import { subscribeStockProjectOrder, unsubscribeStockProjectOrder } from '$lib/stores/stockProjectOrder.svelte';
 	import { subscribeCash, unsubscribeCash } from '$lib/stores/cashTransactions.svelte';
 	import { subscribeSettings, unsubscribeSettings } from '$lib/stores/settings.svelte';
 	import BottomNav from '$lib/components/BottomNav.svelte';
@@ -25,6 +26,7 @@
 			subscribeAppLinks();
 			subscribeProjectPriorities();
 			subscribeArchivedProjects();
+			subscribeStockProjectOrder();
 			subscribeCash();
 			subscribeSettings();
 		} else {
@@ -35,6 +37,7 @@
 			unsubscribeAppLinks();
 			unsubscribeProjectPriorities();
 			unsubscribeArchivedProjects();
+			unsubscribeStockProjectOrder();
 			unsubscribeCash();
 			unsubscribeSettings();
 		}
